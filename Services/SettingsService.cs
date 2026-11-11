@@ -24,6 +24,12 @@ public enum AppTheme
     Dark
 }
 
+public enum OsdPlacement
+{
+    Primary,
+    AllDisplays
+}
+
 /// <summary>
 /// JSON-backed, observable application settings persisted to
 /// %LOCALAPPDATA%\BrightFlyout\settings.json.
@@ -115,6 +121,20 @@ public partial class SettingsService : ObservableObject
     [property: JsonPropertyName("defaultMonitorId")]
     private string _defaultMonitorId = string.Empty;
 
+    /// <summary>Ids of displays excluded from control.</summary>
+    [ObservableProperty]
+    [property: JsonPropertyName("excludedMonitorIds")]
+    private List<string> _excludedMonitorIds = [];
+
+    /// <summary>When on, any brightness change is applied to all included displays.</summary>
+    [ObservableProperty]
+    [property: JsonPropertyName("syncMonitors")]
+    private bool _syncMonitors;
+
+    [ObservableProperty]
+    [property: JsonPropertyName("osdPlacement")]
+    private OsdPlacement _osdPlacement = OsdPlacement.Primary;
+
     partial void OnBrightnessStepChanged(int value) => BrightnessStep = Math.Clamp(value, 1, 50);
     partial void OnOsdDurationMsChanged(int value) => OsdDurationMs = Math.Clamp(value, 500, 10000);
 
@@ -150,6 +170,9 @@ public partial class SettingsService : ObservableObject
                     ShowPercentText = loaded.ShowPercentText;
                     MultiMonitorEnabled = loaded.MultiMonitorEnabled;
                     DefaultMonitorId = loaded.DefaultMonitorId;
+                    ExcludedMonitorIds = loaded.ExcludedMonitorIds ?? [];
+                    SyncMonitors = loaded.SyncMonitors;
+                    OsdPlacement = loaded.OsdPlacement;
                 }
             }
         }

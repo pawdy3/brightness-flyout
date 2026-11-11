@@ -30,6 +30,7 @@ public sealed partial class OsdWindow : Window
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
 
+    private readonly RectInt32 _workArea;
     private DisplayManager? _displays;
     private bool _isDark = true;
     private bool _isExpanded;
@@ -41,9 +42,10 @@ public sealed partial class OsdWindow : Window
     /// <summary>Fired when the OSD auto-hides after its timeout.</summary>
     public event Action? AutoHidden;
 
-    public OsdWindow(SettingsService settings)
+    public OsdWindow(SettingsService settings, RectInt32 workArea)
     {
         _settings = settings;
+        _workArea = workArea;
         InitializeComponent();
 
         SystemBackdrop = new DesktopAcrylicBackdrop();
@@ -105,7 +107,8 @@ public sealed partial class OsdWindow : Window
     public void BindDisplays(DisplayManager displays)
     {
         _displays = displays;
-        DisplayItems.ItemsSource = displays.Displays;
+        DisplayItems.ItemsSource = displays.IncludedDisplays;
+        SyncToggle.IsOn = _settings.SyncMonitors;
         UpdateExpandButtonVisibility();
     }
 
@@ -186,9 +189,24 @@ public sealed partial class OsdWindow : Window
         }
     }
 
-    private void OnSyncClick(object sender, RoutedEventArgs e)
+    private void OnSyncToggled(object sender, RoutedEventArgs e)
     {
-        _displays?.SynchronizeAll();
+        var on = SyncToggle.IsOn;
+        if (_settings.SyncMonitors != on)
+        {
+            _settings.SyncMonitors = on;
+        }
+
+        if (on)
+        {
+            _displays?.SynchronizeAll();
+        }
+    }
+
+    /// <summary>Keeps the sync toggle in sync when changed from elsewhere.</summary>
+    public void SyncToggleState()
+    {
+        SyncToggle.IsOn = _settings.SyncMonitors;
     }
 
     #endregion
@@ -234,9 +252,8 @@ public sealed partial class OsdWindow : Window
 
         int height = (int)Math.Round(heightDip * scale);
 
-        var workArea = DisplayArea.Primary.WorkArea;
-        int x = workArea.X + (workArea.Width - width) / 2;
-        int y = workArea.Y + workArea.Height - height - (int)Math.Round(BottomMarginDip * scale);
+        int x = _workArea.X + (_workArea.Width - width) / 2;
+        int y = _workArea.Y + _workArea.Height - height - (int)Math.Round(BottomMarginDip * scale);
         _appWindow.MoveAndResize(new RectInt32(x, y, width, height));
     }
 
@@ -253,6 +270,9 @@ public sealed partial class OsdWindow : Window
                 break;
             case nameof(SettingsService.MultiMonitorEnabled):
                 DispatcherQueue.TryEnqueue(UpdateExpandButtonVisibility);
+                break;
+            case nameof(SettingsService.SyncMonitors):
+                DispatcherQueue.TryEnqueue(SyncToggleState);
                 break;
         }
     }

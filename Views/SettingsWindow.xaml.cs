@@ -63,6 +63,7 @@ public sealed partial class SettingsWindow : Window
         VkDownTextBox.Text = _settings.BrightnessDownVk;
         VkUpTextBox.Text = _settings.BrightnessUpVk;
         ThemeComboBox.SelectedIndex = (int)_settings.Theme;
+        PlacementComboBox.SelectedIndex = (int)_settings.OsdPlacement;
         BackgroundComboBox.SelectedIndex = (int)_settings.BackgroundStyle;
         FillComboBox.SelectedIndex = (int)_settings.FillStyle;
         BackgroundColorPicker.Color = ParseColorOrDefault(_settings.CustomBackgroundColor, Color.FromArgb(0xE6, 0x1F, 0x1F, 0x1F));
@@ -210,6 +211,14 @@ public sealed partial class SettingsWindow : Window
         {
             _settings.Theme = (AppTheme)ThemeComboBox.SelectedIndex;
             ApplyTheme();
+        }
+    }
+
+    private void OnPlacementChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_initializing && PlacementComboBox.SelectedIndex >= 0)
+        {
+            _settings.OsdPlacement = (OsdPlacement)PlacementComboBox.SelectedIndex;
         }
     }
 

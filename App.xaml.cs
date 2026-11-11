@@ -15,7 +15,8 @@ public partial class App : Application
 
     internal SettingsService Settings { get; private set; } = null!;
     internal BrightnessController Controller { get; private set; } = null!;
-    internal OsdWindow Osd { get; private set; } = null!;
+    internal OsdManager Osd { get; private set; } = null!;
+    private Microsoft.UI.Dispatching.DispatcherQueue? _uiDispatcher;
 
     public App()
     {
@@ -58,8 +59,9 @@ public partial class App : Application
         menu.Items.Add(exitItem);
         _trayIcon.ContextFlyout = menu;
 
-        // The OSD window doubles as the (hidden) raw-input message target.
-        Osd = new OsdWindow(Settings);
+        // The first OSD window doubles as the (hidden) raw-input message target.
+        Osd = new OsdManager(Settings);
+        _uiDispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
         Controller = new BrightnessController(Settings, Osd);
         Controller.BrightnessChanged += OnBrightnessChanged;
@@ -70,7 +72,7 @@ public partial class App : Application
         // runtime - push explicit themes to all windows ourselves.
         _themeService = new ThemeService(Settings);
         _themeService.EffectiveThemeChanged += () =>
-            Osd.DispatcherQueue.TryEnqueue(ApplyThemeToWindows);
+            _uiDispatcher?.TryEnqueue(ApplyThemeToWindows);
         ApplyThemeToWindows();
 
         if (Environment.GetCommandLineArgs().Contains("--open-settings"))

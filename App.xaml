@@ -18,7 +18,7 @@
                 <tb:TaskbarIcon.IconSource>
                     <tb:GeneratedIconSource
                         Text="&#xE706;"
-                        FontFamily="Segoe Fluent Icons"
+                        FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                         Foreground="#F5C542"
                         Background="Transparent"
                         FontSize="96"

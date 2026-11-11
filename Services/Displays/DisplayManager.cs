@@ -5,15 +5,20 @@ namespace BrightFlyout.Services.Displays;
 
 /// <summary>
 /// Owns the set of controllable displays. Each physical monitor is probed for DDC/CI
-/// (VCP 0x10); displays that answer get a <see cref="DdcCiDisplayController"/>,
-/// displays that don't (typically internal laptop panels) are paired with WMI
-/// brightness instances in enumeration order.
+/// (VCP 0x10); displays that answer get a <see cref="DdcCiDisplayController"/>.
+/// Displays that don't answer are paired with WMI brightness instances (internal
+/// laptop panels) in enumeration order; displays that neither answer DDC/CI nor have
+/// a WMI counterpart are phantom/stale entries and are filtered out.
 /// </summary>
 public sealed class DisplayManager
 {
     private readonly SettingsService _settings;
 
+    /// <summary>All detected controllable displays (shown in Settings).</summary>
     public ObservableCollection<DisplayViewModel> Displays { get; } = new();
+
+    /// <summary>Displays included in control (shown in the flyout).</summary>
+    public ObservableCollection<DisplayViewModel> IncludedDisplays { get; } = new();
 
     /// <summary>Raised on the UI thread when the display list or a value changes.</summary>
     public event Action? Changed;
@@ -24,13 +29,13 @@ public sealed class DisplayManager
     }
 
     /// <summary>The display targeted by the keyboard. "Last touched" in multi-display
-    /// mode; falls back to the configured default, then to the first display.</summary>
+    /// mode; falls back to the configured default, then to the first included display.</summary>
     public string? TargetId { get; private set; }
 
     public DisplayViewModel? Target =>
-        Displays.FirstOrDefault(d => d.Id == TargetId)
-        ?? Displays.FirstOrDefault(d => d.Id == _settings.DefaultMonitorId)
-        ?? Displays.FirstOrDefault();
+        IncludedDisplays.FirstOrDefault(d => d.Id == TargetId)
+        ?? IncludedDisplays.FirstOrDefault(d => d.Id == _settings.DefaultMonitorId)
+        ?? IncludedDisplays.FirstOrDefault();
 
     public void SetTarget(string id)
     {
@@ -52,7 +57,7 @@ public sealed class DisplayManager
         Changed?.Invoke();
     }
 
-    private static List<IDisplayController> EnumerateControllers()
+    private List<IDisplayController> EnumerateControllers()
     {
         var controllers = new List<IDisplayController>();
         var wmiInstances = WmiDisplayController.EnumerateInstanceNames();
@@ -68,26 +73,26 @@ public sealed class DisplayManager
                     monitor.hPhysicalMonitor, Native.NativeMethods.VCP_CODE_LUMINANCE,
                     IntPtr.Zero, out _, out _);
 
-                if (ddcWorks || wmiIndex >= wmiInstances.Count)
+                if (ddcWorks)
                 {
                     controllers.Add(new DdcCiDisplayController(deviceName, description));
                 }
-                else
+                else if (wmiIndex < wmiInstances.Count)
                 {
                     // No DDC/CI: assume internal panel, pair with the next WMI instance.
                     controllers.Add(new WmiDisplayController(wmiInstances[wmiIndex++]));
+                }
+                else
+                {
+                    // Neither transport works: phantom/stale monitor entry (common on
+                    // laptops, e.g. duplicate "Generic PnP Monitor"). Don't list it.
+                    App.Log($"Skipping unresponsive display '{description}' ({deviceName})");
                 }
             }
         }
         finally
         {
             DdcCiDisplayController.DestroyAll(physical);
-        }
-
-        // Leftover WMI instances that couldn't be paired: still expose them.
-        while (wmiIndex < wmiInstances.Count)
-        {
-            controllers.Add(new WmiDisplayController(wmiInstances[wmiIndex++]));
         }
 
         return controllers;
@@ -107,9 +112,49 @@ public sealed class DisplayManager
         {
             if (Displays.All(d => d.Id != controller.Id))
             {
-                Displays.Add(new DisplayViewModel(controller, OnDisplaySetRequested));
+                Displays.Add(new DisplayViewModel(controller, OnDisplaySetRequested, OnDisplayInclusionChanged)
+                {
+                    IsIncluded = !_settings.ExcludedMonitorIds.Contains(controller.Id)
+                });
             }
         }
+
+        SyncIncludedList();
+    }
+
+    private void SyncIncludedList()
+    {
+        for (int i = IncludedDisplays.Count - 1; i >= 0; i--)
+        {
+            var d = IncludedDisplays[i];
+            if (!Displays.Contains(d) || !d.IsIncluded)
+            {
+                IncludedDisplays.RemoveAt(i);
+            }
+        }
+
+        foreach (var d in Displays.Where(d => d.IsIncluded && !IncludedDisplays.Contains(d)))
+        {
+            IncludedDisplays.Add(d);
+        }
+    }
+
+    private void OnDisplayInclusionChanged(DisplayViewModel display, bool included)
+    {
+        var excluded = _settings.ExcludedMonitorIds;
+        if (included)
+        {
+            excluded.RemoveAll(id => id == display.Id);
+        }
+        else if (!excluded.Contains(display.Id))
+        {
+            excluded.Add(display.Id);
+        }
+
+        _settings.Save();
+        SyncIncludedList();
+        UpdateTargetFlags();
+        Changed?.Invoke();
     }
 
     private void UpdateTargetFlags()
@@ -128,7 +173,7 @@ public sealed class DisplayManager
         Changed?.Invoke();
     }
 
-    /// <summary>Sets every display to the target's current brightness.</summary>
+    /// <summary>Sets every included display to the target's current brightness.</summary>
     public void SynchronizeAll()
     {
         var target = Target;
@@ -137,9 +182,17 @@ public sealed class DisplayManager
             return;
         }
 
-        foreach (var display in Displays)
+        SetAllIncluded(target.Brightness);
+    }
+
+    /// <summary>Applies a brightness value to all included displays.</summary>
+    public void SetAllIncluded(int value)
+    {
+        foreach (var display in IncludedDisplays)
         {
-            display.SetBrightness(target.Brightness);
+            display.SetBrightness(value);
         }
+
+        Changed?.Invoke();
     }
 }

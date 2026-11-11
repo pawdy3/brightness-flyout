@@ -41,6 +41,7 @@ internal static class NativeMethods
     public const ushort HID_USAGE_BRIGHTNESS_INCREMENT = 0x006F;
     public const ushort HID_USAGE_BRIGHTNESS_DECREMENT = 0x0070;
 
+    public const int RIDEV_REMOVE = 0x00000001;
     public const int RIDEV_INPUTSINK = 0x00000100;
     public const uint RID_INPUT = 0x10000003;
     public const uint RIDI_PREPARSEDDATA = 0x20000005;

@@ -1,0 +1,112 @@
+using BrightFlyout.Services;
+using BrightFlyout.Services.Displays;
+using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml;
+
+namespace BrightFlyout.Views;
+
+/// <summary>
+/// Owns the OSD window(s). Placement "Primary" keeps a single flyout on the primary
+/// display; "AllDisplays" shows one flyout per connected display. The first window
+/// also serves as the raw-input message target.
+/// </summary>
+public sealed class OsdManager
+{
+    private readonly SettingsService _settings;
+    private readonly List<OsdWindow> _windows = [];
+    private DisplayManager? _displays;
+    private ElementTheme _theme = ElementTheme.Default;
+    private int _hiddenCount;
+
+    /// <summary>Fired when every visible OSD window has auto-hidden.</summary>
+    public event Action? AutoHidden;
+
+    public OsdManager(SettingsService settings)
+    {
+        _settings = settings;
+        EnsureWindows();
+    }
+
+    /// <summary>HWND of the first OSD window (raw-input message target).</summary>
+    public IntPtr Hwnd => _windows[0].Hwnd;
+
+    public void BindDisplays(DisplayManager displays)
+    {
+        _displays = displays;
+        foreach (var window in _windows)
+        {
+            window.BindDisplays(displays);
+        }
+    }
+
+    public void SetTheme(ElementTheme theme)
+    {
+        _theme = theme;
+        foreach (var window in _windows)
+        {
+            window.SetTheme(theme);
+        }
+    }
+
+    public void RefreshDisplays()
+    {
+        foreach (var window in _windows)
+        {
+            window.RefreshDisplays();
+        }
+    }
+
+    public void ShowBrightness(int value)
+    {
+        EnsureWindows();
+
+        _hiddenCount = 0;
+        foreach (var window in _windows)
+        {
+            window.ShowBrightness(value);
+        }
+    }
+
+    private void EnsureWindows()
+    {
+        bool all = _settings.OsdPlacement == OsdPlacement.AllDisplays;
+        var areas = all
+            ? DisplayArea.FindAll().Select(a => a.WorkArea).ToList()
+            : [DisplayArea.Primary.WorkArea];
+
+        if (_windows.Count == areas.Count)
+        {
+            return;
+        }
+
+        foreach (var window in _windows)
+        {
+            window.AutoHidden -= OnWindowAutoHidden;
+            window.Close();
+        }
+
+        _windows.Clear();
+
+        foreach (var area in areas)
+        {
+            var window = new OsdWindow(_settings, area);
+            if (_displays is not null)
+            {
+                window.BindDisplays(_displays);
+            }
+
+            window.SetTheme(_theme);
+            window.AutoHidden += OnWindowAutoHidden;
+            _windows.Add(window);
+        }
+    }
+
+    private void OnWindowAutoHidden()
+    {
+        _hiddenCount++;
+        if (_hiddenCount >= _windows.Count)
+        {
+            AutoHidden?.Invoke();
+        }
+    }
+}

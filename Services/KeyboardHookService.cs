@@ -57,10 +57,30 @@ internal sealed class KeyboardHookService : IDisposable
         _hookHandle = NativeMethods.SetWindowsHookExW(
             NativeMethods.WH_KEYBOARD_LL, _hookProc, NativeMethods.GetModuleHandleW(null), 0);
 
-        if (_settings.EnableRawInput)
+        AttachRawInput();
+        SetRawInputEnabled(_settings.EnableRawInput);
+    }
+
+    /// <summary>Enables/disables Raw Input listening at runtime (no restart needed).</summary>
+    public void SetRawInputEnabled(bool enabled)
+    {
+        if (_rawInputHwnd == IntPtr.Zero)
         {
-            AttachRawInput(rawInputTargetHwnd);
+            return;
         }
+
+        var devices = new[]
+        {
+            new NativeMethods.RAWINPUTDEVICE
+            {
+                usUsagePage = NativeMethods.HID_USAGE_PAGE_CONSUMER,
+                usUsage = NativeMethods.HID_USAGE_CONSUMER_CONTROL,
+                dwFlags = enabled ? NativeMethods.RIDEV_INPUTSINK : NativeMethods.RIDEV_REMOVE,
+                hwndTarget = enabled ? _rawInputHwnd : IntPtr.Zero
+            }
+        };
+
+        NativeMethods.RegisterRawInputDevices(devices, 1, Marshal.SizeOf<NativeMethods.RAWINPUTDEVICE>());
     }
 
     #region WH_KEYBOARD_LL
@@ -99,26 +119,11 @@ internal sealed class KeyboardHookService : IDisposable
 
     #region Raw Input (HID consumer control 0x006F / 0x0070)
 
-    private void AttachRawInput(IntPtr hwnd)
+    private void AttachRawInput()
     {
-        var devices = new[]
-        {
-            new NativeMethods.RAWINPUTDEVICE
-            {
-                usUsagePage = NativeMethods.HID_USAGE_PAGE_CONSUMER,
-                usUsage = NativeMethods.HID_USAGE_CONSUMER_CONTROL,
-                dwFlags = NativeMethods.RIDEV_INPUTSINK,
-                hwndTarget = hwnd
-            }
-        };
-
-        if (!NativeMethods.RegisterRawInputDevices(devices, 1, Marshal.SizeOf<NativeMethods.RAWINPUTDEVICE>()))
-        {
-            return;
-        }
-
+        // Subclass once; WM_INPUT only arrives while the raw-input registration is active.
         _subclassProc = RawInputSubclassProc;
-        NativeMethods.SetWindowSubclass(hwnd, _subclassProc, (UIntPtr)1, UIntPtr.Zero);
+        NativeMethods.SetWindowSubclass(_rawInputHwnd, _subclassProc, (UIntPtr)1, UIntPtr.Zero);
     }
 
     private IntPtr RawInputSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, UIntPtr dwRefData)

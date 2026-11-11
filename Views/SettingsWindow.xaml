@@ -45,13 +45,24 @@
                         <ItemsControl x:Name="DisplayStatusItems">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:DisplayViewModel">
-                                    <StackPanel Margin="0,2">
-                                        <TextBlock FontSize="13" Text="{x:Bind Name}" />
-                                        <TextBlock
-                                            FontSize="12"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            Text="{x:Bind Technology}" />
-                                    </StackPanel>
+                                    <Grid Margin="0,4" ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock FontSize="13" Text="{x:Bind Name}" />
+                                            <TextBlock
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="{x:Bind Technology}" />
+                                        </StackPanel>
+                                        <CheckBox
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            Content="Control"
+                                            IsChecked="{x:Bind IsIncluded, Mode=TwoWay}" />
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -151,6 +162,17 @@
                                 <ComboBoxItem Content="Use system setting" />
                                 <ComboBoxItem Content="Light" />
                                 <ComboBoxItem Content="Dark" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Show flyout on" />
+                            <ComboBox
+                                x:Name="PlacementComboBox"
+                                HorizontalAlignment="Stretch"
+                                SelectionChanged="OnPlacementChanged">
+                                <ComboBoxItem Content="Primary display" />
+                                <ComboBoxItem Content="All displays" />
                             </ComboBox>
                         </StackPanel>
 

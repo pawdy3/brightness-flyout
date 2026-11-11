@@ -15,15 +15,41 @@ internal static class NativeOsdSuppressor
 {
     private static IntPtr _nativeOsdElement = IntPtr.Zero;
     private static long _originalExStyle;
+    private static IntPtr _legacyOsdElement = IntPtr.Zero;
 
-    public static bool IsSuppressed => _nativeOsdElement != IntPtr.Zero;
+    public static bool IsSuppressed => _nativeOsdElement != IntPtr.Zero || _legacyOsdElement != IntPtr.Zero;
 
     public static void Suppress()
     {
-        if (_nativeOsdElement != IntPtr.Zero)
+        if (IsSuppressed)
         {
             return; // already hidden
         }
+
+        if (!SuppressWindows11Osd())
+        {
+            SuppressLegacyOsd();
+        }
+    }
+
+    /// <summary>Windows 10 and earlier: the OSD is a DirectUI popup hosted in a
+    /// "NativeHWNDHost" window (the gpkgpk/HideVolumeOSD approach).</summary>
+    private static void SuppressLegacyOsd()
+    {
+        var hwnd = NativeMethods.FindWindowExW(IntPtr.Zero, IntPtr.Zero, "NativeHWNDHost", "");
+        if (hwnd == IntPtr.Zero
+            || NativeMethods.FindWindowExW(hwnd, IntPtr.Zero, "DirectUIHWND", "") == IntPtr.Zero)
+        {
+            return;
+        }
+
+        _legacyOsdElement = hwnd;
+        NativeMethods.ShowWindow(hwnd, NativeMethods.SW_HIDE);
+    }
+
+    /// <summary>Windows 11 22H2+: the OSD lives in an explorer-hosted XAML island.</summary>
+    private static bool SuppressWindows11Osd()
+    {
 
         // Walk the XAML islands; FindWindowEx must be given the previous handle as
         // hwndChildAfter, otherwise it returns the same first island forever.
@@ -62,7 +88,7 @@ internal static class NativeOsdSuppressor
 
         if (hwndOsd == IntPtr.Zero)
         {
-            return; // OSD window not found (nothing to suppress right now)
+            return false; // OSD window not found (nothing to suppress right now)
         }
 
         _nativeOsdElement = hwndXamlIsland;
@@ -74,10 +100,17 @@ internal static class NativeOsdSuppressor
         // Minimize without activating: plain SW_MINIMIZE would make Windows move
         // foreground focus to whatever is next in the Z-order.
         NativeMethods.ShowWindow(_nativeOsdElement, NativeMethods.SW_SHOWMINNOACTIVE);
+        return true;
     }
 
     public static void Restore()
     {
+        if (_legacyOsdElement != IntPtr.Zero)
+        {
+            NativeMethods.ShowWindow(_legacyOsdElement, NativeMethods.SW_SHOWNOACTIVATE);
+            _legacyOsdElement = IntPtr.Zero;
+        }
+
         if (_nativeOsdElement == IntPtr.Zero)
         {
             return;

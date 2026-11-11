@@ -11,9 +11,16 @@ built-in one.
   probed at startup and paired with the transport that answers. Writes are coalesced,
   so rapid key presses never queue slow DDC transactions.
 - **Multi-display mode** (off by default): the flyout gains an expand arrow listing
-  one slider per display plus a *Synchronize all displays* button. The keyboard
+  one slider per display plus a *Synchronize all displays* toggle. The keyboard
   controls the display whose slider was touched last (or the default display chosen
-  in Settings at startup).
+  in Settings at startup). Individual displays can be excluded from control in
+  Settings, and the flyout can appear on the primary display or on all displays.
+- **Laptop support**: on mobile systems Windows consumes the brightness keys itself;
+  a `WmiMonitorBrightnessEvent` watcher mirrors those changes into our OSD (and to
+  all included displays when sync is on). Displays that answer neither DDC/CI nor
+  WMI (phantom "Generic PnP" entries) are filtered out.
+- **Windows 10**: icon fonts fall back to Segoe MDL2 Assets, and the native OSD is
+  suppressed via the legacy `NativeHWNDHost` host window.
 - **Keyboard input detection**, two complementary paths:
   - `WH_KEYBOARD_LL` low-level hook with configurable virtual-key codes
     (matching keys are swallowed before the shell sees them), and

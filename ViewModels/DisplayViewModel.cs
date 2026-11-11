@@ -11,12 +11,16 @@ namespace BrightFlyout.ViewModels;
 public partial class DisplayViewModel : ObservableObject
 {
     private readonly Action<DisplayViewModel, int> _setRequested;
+    private readonly Action<DisplayViewModel, bool> _includeChanged;
     private bool _suppressNotification;
 
-    public DisplayViewModel(IDisplayController controller, Action<DisplayViewModel, int> setRequested)
+    public DisplayViewModel(IDisplayController controller,
+        Action<DisplayViewModel, int> setRequested,
+        Action<DisplayViewModel, bool> includeChanged)
     {
         Controller = controller;
         _setRequested = setRequested;
+        _includeChanged = includeChanged;
         _brightness = controller.CurrentBrightness ?? 50;
     }
 
@@ -32,6 +36,12 @@ public partial class DisplayViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isTarget;
+
+    /// <summary>Whether this display is controlled (keyboard, sync, flyout).</summary>
+    [ObservableProperty]
+    private bool _isIncluded = true;
+
+    partial void OnIsIncludedChanged(bool value) => _includeChanged(this, value);
 
     // x:Bind in a Window DataTemplate can't use value converters, hence a property.
     public Visibility TargetMarkerVisibility => IsTarget ? Visibility.Visible : Visibility.Collapsed;
@@ -56,6 +66,15 @@ public partial class DisplayViewModel : ObservableObject
     public void SetBrightness(int value)
     {
         Controller.SetBrightness(value);
+        _suppressNotification = true;
+        Brightness = Math.Clamp(value, 0, 100);
+        _suppressNotification = false;
+    }
+
+    /// <summary>Updates the cached value without writing to the hardware (the OS changed
+    /// the brightness itself, e.g. laptop brightness keys handled by Windows).</summary>
+    public void SetBrightnessSilently(int value)
+    {
         _suppressNotification = true;
         Brightness = Math.Clamp(value, 0, 100);
         _suppressNotification = false;

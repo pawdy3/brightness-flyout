@@ -37,7 +37,7 @@
                     <FontIcon
                         x:Name="BrightnessIcon"
                         VerticalAlignment="Center"
-                        FontFamily="Segoe Fluent Icons"
+                        FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                         FontSize="20"
                         Glyph="&#xE706;" />
 
@@ -79,7 +79,7 @@
                         Visibility="Collapsed">
                         <FontIcon
                             x:Name="ExpandIcon"
-                            FontFamily="Segoe Fluent Icons"
+                            FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                             FontSize="12"
                             Glyph="&#xE70D;" />
                     </Button>
@@ -140,12 +140,13 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <Button
-                        x:Name="SyncButton"
+                    <ToggleSwitch
+                        x:Name="SyncToggle"
                         Margin="0,4,0,0"
-                        HorizontalAlignment="Stretch"
-                        Click="OnSyncClick"
-                        Content="Synchronize all displays" />
+                        Header="Synchronize all displays"
+                        OffContent=""
+                        OnContent=""
+                        Toggled="OnSyncToggled" />
                 </StackPanel>
             </Grid>
         </Border>

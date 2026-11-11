@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using BrightFlyout.Native;
 using BrightFlyout.Services.Displays;
 using BrightFlyout.Views;
@@ -12,8 +13,9 @@ namespace BrightFlyout.Services;
 internal sealed class BrightnessController : IDisposable
 {
     private readonly SettingsService _settings;
-    private readonly OsdWindow _osd;
+    private readonly OsdManager _osd;
     private readonly KeyboardHookService _hook;
+    private readonly WmiBrightnessWatcher _wmiWatcher = new();
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly DispatcherQueueTimer _suppressWatchdog;
     private readonly DispatcherQueueTimer _restoreTimer;
@@ -23,7 +25,7 @@ internal sealed class BrightnessController : IDisposable
 
     public DisplayManager Displays { get; }
 
-    public BrightnessController(SettingsService settings, OsdWindow osd)
+    public BrightnessController(SettingsService settings, OsdManager osd)
     {
         _settings = settings;
         _osd = osd;
@@ -34,6 +36,8 @@ internal sealed class BrightnessController : IDisposable
         _hook = new KeyboardHookService(settings);
         _hook.BrightnessStepRequested += OnBrightnessStepRequested;
         _osd.AutoHidden += OnOsdAutoHidden;
+        _settings.PropertyChanged += OnSettingsPropertyChanged;
+        _wmiWatcher.BrightnessChanged += OnWmiBrightnessChanged;
 
         // Explorer can create the native OSD island a moment *after* the key press,
         // so a single suppress attempt can miss it. While our OSD is visible, keep
@@ -72,6 +76,13 @@ internal sealed class BrightnessController : IDisposable
     public async Task RefreshDisplaysAsync()
     {
         await Displays.RefreshAsync();
+
+        // The WMI event watcher is only meaningful with an internal panel present.
+        if (Displays.Displays.Any(d => d.Controller is WmiDisplayController))
+        {
+            _wmiWatcher.Start();
+        }
+
         if (Displays.Target is { } target)
         {
             BrightnessChanged?.Invoke(target.Brightness);
@@ -87,6 +98,14 @@ internal sealed class BrightnessController : IDisposable
         }
     }
 
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(SettingsService.EnableRawInput))
+        {
+            _hook.SetRawInputEnabled(_settings.EnableRawInput);
+        }
+    }
+
     private void OnBrightnessStepRequested(BrightnessDirection direction)
     {
         _dispatcherQueue.TryEnqueue(() =>
@@ -98,29 +117,74 @@ internal sealed class BrightnessController : IDisposable
             }
 
             var value = Math.Clamp(target.Brightness + _settings.BrightnessStep * (int)direction, 0, 100);
-            target.SetBrightness(value);
+            ApplyBrightness(value);
+        });
+    }
 
-            // Hide the native Windows OSD only for the short window in which it
-            // could appear; restored on OSD auto-hide and on app exit.
-            NativeOsdSuppressor.Suppress();
-            _restoreTimer.Stop();
-            _suppressWatchdog.Start();
+    /// <summary>Laptop path: Windows itself changed the internal panel brightness
+    /// (mobile systems consume the HID usages before any hook). Mirror the change.</summary>
+    private void OnWmiBrightnessChanged(int value)
+    {
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            var wmiDisplay = Displays.Displays.FirstOrDefault(d => d.Controller is WmiDisplayController);
+            if (wmiDisplay is null || Math.Abs(wmiDisplay.Brightness - value) <= 1)
+            {
+                return; // feedback from our own write, or nothing to do
+            }
 
-            _osd.ShowBrightness(value);
+            wmiDisplay.SetBrightnessSilently(value);
+            Displays.SetTarget(wmiDisplay.Id);
+
+            if (_settings.SyncMonitors)
+            {
+                Displays.SetAllIncluded(value);
+            }
+
+            ApplyOsd(value);
             BrightnessChanged?.Invoke(value);
         });
+    }
+
+    /// <summary>Applies a brightness value honoring the sync toggle, then shows the OSD.</summary>
+    private void ApplyBrightness(int value)
+    {
+        if (_settings.SyncMonitors)
+        {
+            Displays.SetAllIncluded(value);
+        }
+        else
+        {
+            Displays.Target?.SetBrightness(value);
+        }
+
+        ApplyOsd(value);
+        BrightnessChanged?.Invoke(value);
+    }
+
+    private void ApplyOsd(int value)
+    {
+        // Hide the native Windows OSD only for the short window in which it
+        // could appear; restored on OSD auto-hide and on app exit.
+        NativeOsdSuppressor.Suppress();
+        _restoreTimer.Stop();
+        _suppressWatchdog.Start();
+
+        _osd.ShowBrightness(value);
     }
 
     /// <summary>Directly sets the target display's brightness (settings slider).</summary>
     public void SetTargetBrightness(int value, bool showOsd = false)
     {
-        var target = Displays.Target;
-        if (target is null)
+        if (_settings.SyncMonitors)
         {
-            return;
+            Displays.SetAllIncluded(value);
+        }
+        else
+        {
+            Displays.Target?.SetBrightness(value);
         }
 
-        target.SetBrightness(value);
         if (showOsd)
         {
             _osd.ShowBrightness(value);
@@ -138,8 +202,10 @@ internal sealed class BrightnessController : IDisposable
     public void Dispose()
     {
         _osd.AutoHidden -= OnOsdAutoHidden;
+        _settings.PropertyChanged -= OnSettingsPropertyChanged;
         _suppressWatchdog.Stop();
         _restoreTimer.Stop();
+        _wmiWatcher.Dispose();
         _hook.Dispose();
         NativeOsdSuppressor.Restore();
     }
