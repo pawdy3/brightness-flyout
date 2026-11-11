@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="BrightFlyout.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:tb="using:H.NotifyIcon">
+
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <tb:TaskbarIcon
+                x:Key="TrayIcon"
+                ContextMenuMode="SecondWindow"
+                ToolTipText="BrightFlyout">
+                <tb:TaskbarIcon.IconSource>
+                    <tb:GeneratedIconSource
+                        Text="&#xE706;"
+                        FontFamily="Segoe Fluent Icons"
+                        Foreground="#F5C542"
+                        Background="Transparent"
+                        FontSize="96"
+                        Size="128" />
+                </tb:TaskbarIcon.IconSource>
+            </tb:TaskbarIcon>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

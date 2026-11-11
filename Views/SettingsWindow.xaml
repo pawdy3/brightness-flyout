@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="BrightFlyout.Views.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="BrightFlyout Settings">
+
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Custom title bar -->
+        <Grid x:Name="TitleBar" Padding="16,0,0,0" VerticalAlignment="Stretch">
+            <TextBlock
+                VerticalAlignment="Center"
+                FontSize="13"
+                FontWeight="SemiBold"
+                Text="BrightFlyout Settings" />
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" Padding="16,0,16,16">
+            <StackPanel Spacing="12" MaxWidth="560">
+
+                <TextBlock
+                    FontSize="20"
+                    FontWeight="SemiBold"
+                    Text="Settings" />
+
+                <!-- Monitor status -->
+                <Border
+                    Padding="16"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <StackPanel Spacing="8">
+                        <TextBlock FontWeight="SemiBold" Text="Display (DDC/CI)" />
+                        <TextBlock
+                            x:Name="MonitorStatusText"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Detecting monitor..."
+                            TextWrapping="Wrap" />
+                        <StackPanel Spacing="4">
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Brightness" />
+                            <Slider
+                                x:Name="BrightnessSlider"
+                                Maximum="100"
+                                Minimum="0"
+                                StepFrequency="1"
+                                ValueChanged="OnBrightnessSliderChanged" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Behavior -->
+                <Border
+                    Padding="16"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <StackPanel Spacing="12">
+                        <TextBlock FontWeight="SemiBold" Text="Behavior" />
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Brightness step (%)" />
+                            <NumberBox
+                                x:Name="StepNumberBox"
+                                Maximum="50"
+                                Minimum="1"
+                                SmallChange="1"
+                                SpinButtonPlacementMode="Inline"
+                                ValueChanged="OnStepChanged" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="OSD visible time (seconds)" />
+                            <NumberBox
+                                x:Name="DurationNumberBox"
+                                Maximum="10"
+                                Minimum="0.5"
+                                SmallChange="0.5"
+                                SpinButtonPlacementMode="Inline"
+                                ValueChanged="OnDurationChanged" />
+                        </StackPanel>
+
+                        <ToggleSwitch
+                            x:Name="StartupToggle"
+                            Header="Run at Windows startup"
+                            OffContent=""
+                            OnContent=""
+                            Toggled="OnStartupToggled" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Appearance -->
+                <Border
+                    Padding="16"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <StackPanel Spacing="12">
+                        <TextBlock FontWeight="SemiBold" Text="Flyout appearance" />
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Theme" />
+                            <ComboBox
+                                x:Name="ThemeComboBox"
+                                HorizontalAlignment="Stretch"
+                                SelectionChanged="OnThemeChanged">
+                                <ComboBoxItem Content="Use system setting" />
+                                <ComboBoxItem Content="Light" />
+                                <ComboBoxItem Content="Dark" />
+                            </ComboBox>
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Background" />
+                            <ComboBox
+                                x:Name="BackgroundComboBox"
+                                HorizontalAlignment="Stretch"
+                                SelectionChanged="OnBackgroundStyleChanged">
+                                <ComboBoxItem Content="Acrylic (system)" />
+                                <ComboBoxItem Content="Custom color" />
+                            </ComboBox>
+                            <ColorPicker
+                                x:Name="BackgroundColorPicker"
+                                Margin="0,8,0,0"
+                                IsAlphaEnabled="True"
+                                IsMoreButtonVisible="True"
+                                Visibility="Collapsed"
+                                ColorChanged="OnBackgroundColorChanged" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Bar fill" />
+                            <ComboBox
+                                x:Name="FillComboBox"
+                                HorizontalAlignment="Stretch"
+                                SelectionChanged="OnFillStyleChanged">
+                                <ComboBoxItem Content="System accent color" />
+                                <ComboBoxItem Content="Custom color" />
+                            </ComboBox>
+                            <ColorPicker
+                                x:Name="FillColorPicker"
+                                Margin="0,8,0,0"
+                                IsMoreButtonVisible="True"
+                                Visibility="Collapsed"
+                                ColorChanged="OnFillColorChanged" />
+                        </StackPanel>
+
+                        <Button
+                            x:Name="PreviewButton"
+                            HorizontalAlignment="Left"
+                            Click="OnPreviewClick"
+                            Content="Preview flyout" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Input -->
+                <Border
+                    Padding="16"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+                    <StackPanel Spacing="12">
+                        <TextBlock FontWeight="SemiBold" Text="Keyboard input" />
+
+                        <ToggleSwitch
+                            x:Name="RawInputToggle"
+                            Header="Listen for HID consumer brightness keys via Raw Input"
+                            OffContent=""
+                            OnContent=""
+                            Toggled="OnRawInputToggled" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            FontSize="12"
+                            Text="Recommended. Keyboards that report brightness as HID consumer-control usages are invisible to keyboard hooks; Raw Input is how those keys are detected."
+                            TextWrapping="Wrap" />
+
+                        <TextBlock Text="Low-level hook (WH_KEYBOARD_LL) virtual key codes:" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Brightness down VK (hex)" />
+                                <TextBox
+                                    x:Name="VkDownTextBox"
+                                    PlaceholderText="0x9E"
+                                    TextChanged="OnVkTextChanged" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Spacing="4">
+                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Brightness up VK (hex)" />
+                                <TextBox
+                                    x:Name="VkUpTextBox"
+                                    PlaceholderText="0x9F"
+                                    TextChanged="OnVkTextChanged" />
+                            </StackPanel>
+                        </Grid>
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            FontSize="12"
+                            Text="Only needed if your keyboard emits actual virtual key codes for brightness. Matching key presses are swallowed before the shell sees them."
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>
