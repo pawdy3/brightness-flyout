@@ -41,12 +41,19 @@ public partial class App : Application
         _trayIcon.ForceCreate();
 
         // Events can't be wired in Application XAML; build the menu in code.
+        // MinWidth: SecondWindow mode measures flyout items before their templates
+        // are fully loaded right after app start, which crops the item text.
         var menu = new MenuFlyout();
-        var settingsItem = new MenuFlyoutItem { Text = "Settings", Icon = new FontIcon { Glyph = "\uE713" } };
+        var settingsItem = new MenuFlyoutItem
+        {
+            Text = "Settings",
+            Icon = new FontIcon { Glyph = "\uE713" },
+            MinWidth = 160
+        };
         settingsItem.Click += OnSettingsMenuClick;
         menu.Items.Add(settingsItem);
-        menu.Items.Add(new MenuFlyoutSeparator());
-        var exitItem = new MenuFlyoutItem { Text = "Exit" };
+        menu.Items.Add(new MenuFlyoutSeparator { MinWidth = 160 });
+        var exitItem = new MenuFlyoutItem { Text = "Exit", MinWidth = 160 };
         exitItem.Click += OnExitMenuClick;
         menu.Items.Add(exitItem);
         _trayIcon.ContextFlyout = menu;
@@ -56,6 +63,7 @@ public partial class App : Application
 
         Controller = new BrightnessController(Settings, Osd);
         Controller.BrightnessChanged += OnBrightnessChanged;
+        Osd.BindDisplays(Controller.Displays);
         Controller.Start();
 
         // WinUI 3 doesn't track OS theme switches for ElementTheme.Default at

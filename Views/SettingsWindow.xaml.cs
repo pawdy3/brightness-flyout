@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using BrightFlyout.Services;
+using BrightFlyout.ViewModels;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -34,14 +35,21 @@ public sealed partial class SettingsWindow : Window
         var appWindow = AppWindow.GetFromWindowId(windowId);
         appWindow.Resize(new Windows.Graphics.SizeInt32(620, 900));
 
+        DisplayStatusItems.ItemsSource = _app.Controller.Displays.Displays;
+        DefaultMonitorComboBox.ItemsSource = _app.Controller.Displays.Displays;
+
         LoadFromSettings();
-        UpdateMonitorStatus();
+        UpdateDisplayStatus();
 
         _settings.PropertyChanged += OnSettingsPropertyChanged;
         _app.Controller.BrightnessChanged += OnBrightnessChanged;
+        _app.Controller.Displays.Changed += OnDisplaysChanged;
 
         Closed += OnClosed;
         _initializing = false;
+
+        // Pick up hot-plugged displays whenever the window opens.
+        _ = _app.Controller.RefreshDisplaysAsync();
     }
 
     private void LoadFromSettings()
@@ -58,14 +66,25 @@ public sealed partial class SettingsWindow : Window
         BackgroundColorPicker.Color = ParseColorOrDefault(_settings.CustomBackgroundColor, Color.FromArgb(0xE6, 0x1F, 0x1F, 0x1F));
         FillColorPicker.Color = ParseColorOrDefault(_settings.CustomFillColor, Color.FromArgb(0xFF, 0xF5, 0xC5, 0x42));
         PercentToggle.IsOn = _settings.ShowPercentText;
+        MultiMonitorToggle.IsOn = _settings.MultiMonitorEnabled;
         UpdateColorPickerVisibility();
+        SelectDefaultMonitor();
 
-        if (_app.Controller.Monitor.CurrentBrightness is { } brightness)
+        if (_app.Controller.Displays.Target is { } target)
         {
-            SetSlider(brightness);
+            SetSlider(target.Brightness);
         }
 
         ApplyTheme();
+    }
+
+    private void SelectDefaultMonitor()
+    {
+        DefaultMonitorComboBox.DisplayMemberPath = nameof(DisplayViewModel.Name);
+        var selected = _app.Controller.Displays.Displays
+            .FirstOrDefault(d => d.Id == _settings.DefaultMonitorId)
+            ?? _app.Controller.Displays.Displays.FirstOrDefault();
+        DefaultMonitorComboBox.SelectedItem = selected;
     }
 
     /// <summary>Applies the app's effective theme (system theme is tracked by App).</summary>
@@ -79,18 +98,27 @@ public sealed partial class SettingsWindow : Window
         SetTheme(_app.EffectiveTheme());
     }
 
-    private void UpdateMonitorStatus()
+    private void UpdateDisplayStatus()
     {
-        var monitor = _app.Controller.Monitor;
-        MonitorStatusText.Text = monitor.IsAvailable
-            ? $"Connected: {monitor.MonitorName}"
-            : "No DDC/CI capable monitor found on the primary display. Brightness changes will have no effect.";
+        NoDisplaysText.Visibility = _app.Controller.Displays.Displays.Count == 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void OnDisplaysChanged()
+    {
+        UpdateDisplayStatus();
+        SelectDefaultMonitor();
+        if (_app.Controller.Displays.Target is { } target)
+        {
+            SetSlider(target.Brightness);
+        }
     }
 
     private void OnBrightnessChanged(int value)
     {
         SetSlider(value);
-        UpdateMonitorStatus();
+        UpdateDisplayStatus();
     }
 
     private void SetSlider(int value)
@@ -106,7 +134,23 @@ public sealed partial class SettingsWindow : Window
     {
         if (!_initializing && !_sliderUpdating)
         {
-            _app.Controller.SetBrightness((int)e.NewValue, showOsd: false);
+            _app.Controller.SetTargetBrightness((int)e.NewValue);
+        }
+    }
+
+    private void OnMultiMonitorToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_initializing)
+        {
+            _settings.MultiMonitorEnabled = MultiMonitorToggle.IsOn;
+        }
+    }
+
+    private void OnDefaultMonitorChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_initializing && DefaultMonitorComboBox.SelectedItem is DisplayViewModel selected)
+        {
+            _settings.DefaultMonitorId = selected.Id;
         }
     }
 
@@ -234,6 +278,7 @@ public sealed partial class SettingsWindow : Window
     {
         _settings.PropertyChanged -= OnSettingsPropertyChanged;
         _app.Controller.BrightnessChanged -= OnBrightnessChanged;
+        _app.Controller.Displays.Changed -= OnDisplaysChanged;
         _app.OnSettingsWindowClosed();
     }
 

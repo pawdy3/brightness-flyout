@@ -1,33 +1,36 @@
 using BrightFlyout.Native;
+using BrightFlyout.Services.Displays;
 using BrightFlyout.Views;
 using Microsoft.UI.Dispatching;
 
 namespace BrightFlyout.Services;
 
 /// <summary>
-/// Orchestrates the app: keyboard hook events -> DDC/CI brightness change ->
+/// Orchestrates the app: keyboard hook events -> per-display brightness change ->
 /// custom OSD + transient suppression of the native Windows OSD.
 /// </summary>
 internal sealed class BrightnessController : IDisposable
 {
     private readonly SettingsService _settings;
     private readonly OsdWindow _osd;
-    private readonly DdcCiMonitorService _monitor = new();
     private readonly KeyboardHookService _hook;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly DispatcherQueueTimer _suppressWatchdog;
     private readonly DispatcherQueueTimer _restoreTimer;
 
-    /// <summary>Raised (on the UI thread) whenever the brightness value changes.</summary>
+    /// <summary>Raised (on the UI thread) whenever the target display's brightness changes.</summary>
     public event Action<int>? BrightnessChanged;
 
-    public DdcCiMonitorService Monitor => _monitor;
+    public DisplayManager Displays { get; }
 
     public BrightnessController(SettingsService settings, OsdWindow osd)
     {
         _settings = settings;
         _osd = osd;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        Displays = new DisplayManager(settings, _dispatcherQueue);
+        Displays.Changed += OnDisplaysChanged;
+
         _hook = new KeyboardHookService(settings);
         _hook.BrightnessStepRequested += OnBrightnessStepRequested;
         _osd.AutoHidden += OnOsdAutoHidden;
@@ -63,24 +66,39 @@ internal sealed class BrightnessController : IDisposable
     public void Start()
     {
         _hook.Install(_osd.Hwnd);
+        _ = RefreshDisplaysAsync();
+    }
 
-        // Warm the brightness cache in the background; DDC reads are slow.
-        Task.Run(() =>
+    public async Task RefreshDisplaysAsync()
+    {
+        await Displays.RefreshAsync();
+        if (Displays.Target is { } target)
         {
-            var value = _monitor.ReadBrightness();
-            if (value is { } v)
-            {
-                _dispatcherQueue.TryEnqueue(() => BrightnessChanged?.Invoke(v));
-            }
-        });
+            BrightnessChanged?.Invoke(target.Brightness);
+        }
+    }
+
+    private void OnDisplaysChanged()
+    {
+        _osd.RefreshDisplays();
+        if (Displays.Target is { } target)
+        {
+            BrightnessChanged?.Invoke(target.Brightness);
+        }
     }
 
     private void OnBrightnessStepRequested(BrightnessDirection direction)
     {
         _dispatcherQueue.TryEnqueue(() =>
         {
-            var step = _settings.BrightnessStep * (int)direction;
-            var value = _monitor.StepBrightness(step);
+            var target = Displays.Target;
+            if (target is null)
+            {
+                return;
+            }
+
+            var value = Math.Clamp(target.Brightness + _settings.BrightnessStep * (int)direction, 0, 100);
+            target.SetBrightness(value);
 
             // Hide the native Windows OSD only for the short window in which it
             // could appear; restored on OSD auto-hide and on app exit.
@@ -93,22 +111,28 @@ internal sealed class BrightnessController : IDisposable
         });
     }
 
-    /// <summary>Directly sets brightness (used by the settings slider). Shows the OSD.</summary>
-    public void SetBrightness(int value, bool showOsd = true)
+    /// <summary>Directly sets the target display's brightness (settings slider).</summary>
+    public void SetTargetBrightness(int value, bool showOsd = false)
     {
-        var applied = _monitor.SetBrightness(value);
-        if (showOsd)
+        var target = Displays.Target;
+        if (target is null)
         {
-            _osd.ShowBrightness(applied);
+            return;
         }
 
-        BrightnessChanged?.Invoke(applied);
+        target.SetBrightness(value);
+        if (showOsd)
+        {
+            _osd.ShowBrightness(value);
+        }
+
+        BrightnessChanged?.Invoke(value);
     }
 
     /// <summary>Preview the OSD without touching brightness or suppressing the native one.</summary>
     public void PreviewOsd()
     {
-        _osd.ShowBrightness(_monitor.CurrentBrightness ?? 65);
+        _osd.ShowBrightness(Displays.Target?.Brightness ?? 65);
     }
 
     public void Dispose()

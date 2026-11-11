@@ -18,10 +18,15 @@ internal static class NativeMethods
     public const int WM_SYSKEYUP = 0x0105;
     public const int WM_INPUT = 0x00FF;
 
+    public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;
+    public const long WS_BORDER = 0x00800000;
+    public const long WS_DLGFRAME = 0x00400000;
+    public const long WS_THICKFRAME = 0x00040000;
     public const long WS_EX_LAYERED = 0x00080000;
     public const long WS_EX_TRANSPARENT = 0x00000020;
     public const long WS_EX_TOOLWINDOW = 0x00000080;
+    public const long WS_EX_WINDOWEDGE = 0x00000100;
     public const long WS_EX_NOACTIVATE = 0x08000000;
 
     public const int SW_HIDE = 0;
@@ -32,8 +37,10 @@ internal static class NativeMethods
     public const int SW_MINIMIZE = 6;
 
     public const uint SWP_NOSIZE = 0x0001;
+    public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
+    public const uint SWP_FRAMECHANGED = 0x0020;
 
     public const uint MONITOR_DEFAULTTOPRIMARY = 0x00000001;
     public const int MONITORINFOF_PRIMARY = 0x00000001;
@@ -89,6 +96,17 @@ internal static class NativeMethods
         public int dwFlags;
     }
 
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct MONITORINFOEX
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public int dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string szDevice;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     public struct KBDLLHOOKSTRUCT
     {
@@ -139,6 +157,9 @@ internal static class NativeMethods
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFOEX lpmi);
 
     public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 

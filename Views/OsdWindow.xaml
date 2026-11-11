@@ -2,56 +2,151 @@
 <Window
     x:Class="BrightFlyout.Views.OsdWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="using:BrightFlyout.Converters"
+    xmlns:vm="using:BrightFlyout.ViewModels">
 
-    <Grid x:Name="Root" Background="Transparent">
+    <Grid
+        x:Name="Root"
+        Background="Transparent"
+        PointerEntered="OnRootPointerEntered"
+        PointerExited="OnRootPointerExited">
+
+
         <Border
             x:Name="Panel"
-            Padding="20,0"
-            BorderBrush="{ThemeResource SurfaceStrokeColorFlyoutBrush}"
             BorderThickness="1"
             CornerRadius="8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="48" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-            <Grid ColumnSpacing="16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+                <!-- Collapsed row: target display -->
+                <Grid
+                    Padding="20,0,8,0"
+                    ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-                <FontIcon
-                    x:Name="BrightnessIcon"
-                    VerticalAlignment="Center"
-                    FontFamily="Segoe Fluent Icons"
-                    FontSize="20"
-                    Glyph="&#xE706;" />
+                    <FontIcon
+                        x:Name="BrightnessIcon"
+                        VerticalAlignment="Center"
+                        FontFamily="Segoe Fluent Icons"
+                        FontSize="20"
+                        Glyph="&#xE706;" />
 
-                <Grid Grid.Column="1" Height="4" VerticalAlignment="Center">
-                    <Border
-                        x:Name="TrackBar"
-                        Background="{ThemeResource ControlFillColorSecondaryBrush}"
-                        CornerRadius="2" />
-                    <Border
-                        x:Name="FillBar"
-                        HorizontalAlignment="Stretch"
-                        Background="{ThemeResource AccentFillColorDefaultBrush}"
-                        CornerRadius="2"
-                        RenderTransformOrigin="0,0.5">
-                        <Border.RenderTransform>
-                            <ScaleTransform x:Name="FillScale" ScaleX="0" />
-                        </Border.RenderTransform>
-                    </Border>
+                    <Grid Grid.Column="1" Height="4" VerticalAlignment="Center">
+                        <Border
+                            x:Name="TrackBar"
+                            Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                            CornerRadius="2" />
+                        <Border
+                            x:Name="FillBar"
+                            HorizontalAlignment="Stretch"
+                            Background="{ThemeResource AccentFillColorDefaultBrush}"
+                            CornerRadius="2"
+                            RenderTransformOrigin="0,0.5">
+                            <Border.RenderTransform>
+                                <ScaleTransform x:Name="FillScale" ScaleX="0" />
+                            </Border.RenderTransform>
+                        </Border>
+                    </Grid>
+
+                    <TextBlock
+                        x:Name="PercentText"
+                        Grid.Column="2"
+                        Width="38"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text=""
+                        TextAlignment="Right" />
+
+                    <Button
+                        x:Name="ExpandButton"
+                        Grid.Column="3"
+                        Padding="6,2"
+                        VerticalAlignment="Center"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="OnExpandButtonClick"
+                        Visibility="Collapsed">
+                        <FontIcon
+                            x:Name="ExpandIcon"
+                            FontFamily="Segoe Fluent Icons"
+                            FontSize="12"
+                            Glyph="&#xE70D;" />
+                    </Button>
                 </Grid>
 
-                <TextBlock
-                    x:Name="PercentText"
-                    Grid.Column="2"
-                    Width="38"
-                    VerticalAlignment="Center"
-                    FontSize="12"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text=""
-                    TextAlignment="Right" />
+                <!-- Expanded: one slider per display + synchronize -->
+                <StackPanel
+                    x:Name="ExpandedPanel"
+                    Grid.Row="1"
+                    Padding="20,0,20,10"
+                    Spacing="4"
+                    Visibility="Collapsed">
+
+                    <ItemsControl x:Name="DisplayItems">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DisplayViewModel">
+                                <Grid Height="34" ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="14" />
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="44" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        FontSize="8"
+                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                        Text="&#x25CF;"
+                                        Visibility="{x:Bind TargetMarkerVisibility, Mode=OneWay}" />
+
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Text="{x:Bind Name}"
+                                        TextTrimming="CharacterEllipsis"
+                                        ToolTipService.ToolTip="{x:Bind Summary}" />
+
+                                    <Slider
+                                        Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        Maximum="100"
+                                        Minimum="0"
+                                        StepFrequency="1"
+                                        Value="{x:Bind Brightness, Mode=TwoWay}" />
+
+                                    <TextBlock
+                                        Grid.Column="3"
+                                        VerticalAlignment="Center"
+                                        FontSize="12"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        TextAlignment="Right">
+                                        <Run Text="{x:Bind Brightness, Mode=OneWay}" /><Run Text="%" />
+                                    </TextBlock>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Button
+                        x:Name="SyncButton"
+                        Margin="0,4,0,0"
+                        HorizontalAlignment="Stretch"
+                        Click="OnSyncClick"
+                        Content="Synchronize all displays" />
+                </StackPanel>
             </Grid>
         </Border>
     </Grid>

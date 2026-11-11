@@ -6,8 +6,14 @@ built-in one.
 
 ## Features
 
-- **DDC/CI brightness control** of the primary display (VCP code `0x10`, luminance)
-  with coalesced writes, so rapid key presses never queue slow DDC transactions.
+- **Multi-transport display control**: external monitors via DDC/CI (VCP code `0x10`),
+  internal laptop panels via WMI (`WmiMonitorBrightnessMethods`) — each display is
+  probed at startup and paired with the transport that answers. Writes are coalesced,
+  so rapid key presses never queue slow DDC transactions.
+- **Multi-display mode** (off by default): the flyout gains an expand arrow listing
+  one slider per display plus a *Synchronize all displays* button. The keyboard
+  controls the display whose slider was touched last (or the default display chosen
+  in Settings at startup).
 - **Keyboard input detection**, two complementary paths:
   - `WH_KEYBOARD_LL` low-level hook with configurable virtual-key codes
     (matching keys are swallowed before the shell sees them), and

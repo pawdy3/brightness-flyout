@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using BrightFlyout.Native;
 using BrightFlyout.Services;
+using BrightFlyout.Services.Displays;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -15,18 +16,24 @@ namespace BrightFlyout.Views;
 /// Custom on-screen-display replicating the Windows 11 brightness flyout:
 /// a borderless, always-on-top, non-activatable, acrylic-backed pill anchored
 /// above the taskbar at the bottom-center of the primary display.
+/// In multi-display mode it expands to one slider per display.
 /// </summary>
 public sealed partial class OsdWindow : Window
 {
     private const double WidthDip = 360;
-    private const double HeightDip = 48;
+    private const double CollapsedHeightDip = 48;
+    private const double RowHeightDip = 34;
     private const double BottomMarginDip = 24;
 
     private readonly SettingsService _settings;
     private readonly DispatcherQueueTimer _hideTimer;
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
+
+    private DisplayManager? _displays;
     private bool _isDark = true;
+    private bool _isExpanded;
+    private bool _pointerInside;
 
     public IntPtr Hwnd => _hwnd;
 
@@ -52,18 +59,17 @@ public sealed partial class OsdWindow : Window
         presenter.IsAlwaysOnTop = true;
         _appWindow.SetPresenter(presenter);
 
-        // Keep it out of Alt+Tab and never let it take focus.
-        var exStyle = NativeMethods.GetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE);
-        NativeMethods.SetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE,
-            exStyle | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE);
+        // SetBorderAndTitleBar leaves WS_DLGFRAME/WS_EX_WINDOWEDGE behind, and DWM
+        // draws those as a bright ring around the window. The presenter also
+        // re-applies its styles lazily, so the cleanup must run on every show.
+        EnsureCleanFrame();
 
         // Rounded window corners on Windows 11.
         int cornerPreference = NativeMethods.DWMWCP_ROUND;
         NativeMethods.DwmSetWindowAttribute(_hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE,
             ref cornerPreference, sizeof(int));
 
-        // Suppress the DWM-drawn 1px window border, otherwise it shows up as a
-        // light outline around the dark flyout.
+        // Suppress the DWM-drawn 1px window border.
         int borderColor = NativeMethods.DWMWA_COLOR_NONE;
         NativeMethods.DwmSetWindowAttribute(_hwnd, NativeMethods.DWMWA_BORDER_COLOR,
             ref borderColor, sizeof(int));
@@ -74,6 +80,13 @@ public sealed partial class OsdWindow : Window
         _hideTimer.IsRepeating = false;
         _hideTimer.Tick += (_, _) =>
         {
+            if (_pointerInside)
+            {
+                // Don't yank the flyout away while the user is dragging a slider.
+                _hideTimer.Start();
+                return;
+            }
+
             NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_HIDE);
             AutoHidden?.Invoke();
         };
@@ -83,6 +96,30 @@ public sealed partial class OsdWindow : Window
 
         // WinUI shows new windows by default; keep the OSD hidden until needed.
         NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_HIDE);
+    }
+
+    /// <summary>Wires the display list into the expanded view. Called once after startup.</summary>
+    public void BindDisplays(DisplayManager displays)
+    {
+        _displays = displays;
+        DisplayItems.ItemsSource = displays.Displays;
+        UpdateExpandButtonVisibility();
+    }
+
+    /// <summary>Called when the display list or a display's value changed.</summary>
+    public void RefreshDisplays()
+    {
+        UpdateExpandButtonVisibility();
+
+        if (_isExpanded)
+        {
+            ResizeAndReposition();
+        }
+
+        if (_displays?.Target is { } target)
+        {
+            UpdateValue(target.Brightness);
+        }
     }
 
     /// <summary>Pushes an explicit theme (system theme tracked by App).</summary>
@@ -95,9 +132,7 @@ public sealed partial class OsdWindow : Window
 
     public void ShowBrightness(int value)
     {
-        value = Math.Clamp(value, 0, 100);
-        FillScale.ScaleX = value / 100.0;
-        PercentText.Text = $"{value}%";
+        UpdateValue(value);
 
         ResizeAndReposition();
         NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_SHOWNA);
@@ -107,17 +142,119 @@ public sealed partial class OsdWindow : Window
         _hideTimer.Start();
     }
 
+    public void UpdateValue(int value)
+    {
+        value = Math.Clamp(value, 0, 100);
+        FillScale.ScaleX = value / 100.0;
+        PercentText.Text = $"{value}%";
+    }
+
     public void HideNow()
     {
         _hideTimer.Stop();
         NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_HIDE);
     }
 
+    #region Expand / collapse
+
+    private void OnExpandButtonClick(object sender, RoutedEventArgs e)
+    {
+        SetExpanded(!_isExpanded);
+    }
+
+    private void SetExpanded(bool expanded)
+    {
+        _isExpanded = expanded;
+        ExpandedPanel.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+        ExpandIcon.Glyph = expanded ? "\uE70E" : "\uE70D"; // chevron up / down
+        ResizeAndReposition();
+
+        if (expanded)
+        {
+            // Give the user time to reach the sliders.
+            _hideTimer.Stop();
+            _hideTimer.Interval = TimeSpan.FromMilliseconds(Math.Max(_settings.OsdDurationMs, 4000));
+            _hideTimer.Start();
+        }
+    }
+
+    private void UpdateExpandButtonVisibility()
+    {
+        var visible = _settings.MultiMonitorEnabled && (_displays?.Displays.Count ?? 0) > 0;
+        ExpandButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible && _isExpanded)
+        {
+            SetExpanded(false);
+        }
+    }
+
+    private void OnSyncClick(object sender, RoutedEventArgs e)
+    {
+        _displays?.SynchronizeAll();
+    }
+
+    #endregion
+
+    #region Pointer-aware auto-hide
+
+    private void OnRootPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _pointerInside = true;
+    }
+
+    private void OnRootPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _pointerInside = false;
+    }
+
+    #endregion
+
+    private void EnsureCleanFrame()
+    {
+        const long unwantedStyle = NativeMethods.WS_DLGFRAME | NativeMethods.WS_BORDER | NativeMethods.WS_THICKFRAME;
+        var style = NativeMethods.GetWindowLongPtr(_hwnd, NativeMethods.GWL_STYLE);
+        var exStyle = NativeMethods.GetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE);
+        const long unwantedEx = NativeMethods.WS_EX_WINDOWEDGE;
+        const long requiredEx = NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE;
+
+        bool changed = false;
+        if ((style & unwantedStyle) != 0)
+        {
+            NativeMethods.SetWindowLongPtr(_hwnd, NativeMethods.GWL_STYLE, style & ~unwantedStyle);
+            changed = true;
+        }
+
+        var newEx = (exStyle & ~unwantedEx) | requiredEx;
+        if (newEx != exStyle)
+        {
+            NativeMethods.SetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE, newEx);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            NativeMethods.SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER
+                | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED);
+        }
+    }
+
     private void ResizeAndReposition()
     {
+        EnsureCleanFrame();
+
         double scale = NativeMethods.GetDpiForWindow(_hwnd) / 96.0;
         int width = (int)Math.Round(WidthDip * scale);
-        int height = (int)Math.Round(HeightDip * scale);
+
+        double heightDip = CollapsedHeightDip;
+        if (_isExpanded)
+        {
+            int rows = _displays?.Displays.Count ?? 0;
+            // rows + spacing + sync button + its margin + panel padding
+            heightDip += rows * (RowHeightDip + 4) + 32 + 4 + 10;
+        }
+
+        int height = (int)Math.Round(heightDip * scale);
 
         var hMonitor = NativeMethods.MonitorFromPoint(
             new NativeMethods.POINT { X = 0, Y = 0 }, NativeMethods.MONITOR_DEFAULTTOPRIMARY);
@@ -139,6 +276,9 @@ public sealed partial class OsdWindow : Window
             case nameof(SettingsService.CustomFillColor):
             case nameof(SettingsService.ShowPercentText):
                 DispatcherQueue.TryEnqueue(ApplyAppearance);
+                break;
+            case nameof(SettingsService.MultiMonitorEnabled):
+                DispatcherQueue.TryEnqueue(UpdateExpandButtonVisibility);
                 break;
         }
     }

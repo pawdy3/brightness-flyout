@@ -104,6 +104,17 @@ public partial class SettingsService : ObservableObject
     [property: JsonPropertyName("showPercentText")]
     private bool _showPercentText = true;
 
+    // --- Multiple displays ---
+
+    [ObservableProperty]
+    [property: JsonPropertyName("multiMonitorEnabled")]
+    private bool _multiMonitorEnabled;
+
+    /// <summary>Id of the display the keyboard controls by default (empty = first).</summary>
+    [ObservableProperty]
+    [property: JsonPropertyName("defaultMonitorId")]
+    private string _defaultMonitorId = string.Empty;
+
     partial void OnBrightnessStepChanged(int value) => BrightnessStep = Math.Clamp(value, 1, 50);
     partial void OnOsdDurationMsChanged(int value) => OsdDurationMs = Math.Clamp(value, 500, 10000);
 
@@ -137,6 +148,8 @@ public partial class SettingsService : ObservableObject
                     FillStyle = loaded.FillStyle;
                     CustomFillColor = loaded.CustomFillColor;
                     ShowPercentText = loaded.ShowPercentText;
+                    MultiMonitorEnabled = loaded.MultiMonitorEnabled;
+                    DefaultMonitorId = loaded.DefaultMonitorId;
                 }
             }
         }

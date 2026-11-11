@@ -3,6 +3,7 @@
     x:Class="BrightFlyout.Views.SettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:vm="using:BrightFlyout.ViewModels"
     Title="BrightFlyout Settings">
 
     <Grid x:Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
@@ -28,7 +29,7 @@
                     FontWeight="SemiBold"
                     Text="Settings" />
 
-                <!-- Monitor status -->
+                <!-- Displays -->
                 <Border
                     Padding="16"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -36,20 +37,52 @@
                     BorderThickness="1"
                     CornerRadius="8">
                     <StackPanel Spacing="8">
-                        <TextBlock FontWeight="SemiBold" Text="Display (DDC/CI)" />
+                        <TextBlock FontWeight="SemiBold" Text="Displays" />
+                        <ItemsControl x:Name="DisplayStatusItems">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:DisplayViewModel">
+                                    <StackPanel Margin="0,2">
+                                        <TextBlock FontSize="13" Text="{x:Bind Name}" />
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{x:Bind Technology}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                         <TextBlock
-                            x:Name="MonitorStatusText"
+                            x:Name="NoDisplaysText"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="Detecting monitor..."
-                            TextWrapping="Wrap" />
+                            Text="No controllable displays found."
+                            Visibility="Collapsed" />
                         <StackPanel Spacing="4">
-                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Brightness" />
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Brightness (keyboard target)" />
                             <Slider
                                 x:Name="BrightnessSlider"
                                 Maximum="100"
                                 Minimum="0"
                                 StepFrequency="1"
                                 ValueChanged="OnBrightnessSliderChanged" />
+                        </StackPanel>
+
+                        <ToggleSwitch
+                            x:Name="MultiMonitorToggle"
+                            Header="Control all displays (expandable flyout)"
+                            OffContent=""
+                            OnContent=""
+                            Toggled="OnMultiMonitorToggled" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            FontSize="12"
+                            Text="When enabled, the flyout gets an expand arrow with one slider per display and a synchronize button. Keyboard keys control the display whose slider you touched last."
+                            TextWrapping="Wrap" />
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Default display (keyboard target at startup)" />
+                            <ComboBox
+                                x:Name="DefaultMonitorComboBox"
+                                HorizontalAlignment="Stretch"
+                                SelectionChanged="OnDefaultMonitorChanged" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
