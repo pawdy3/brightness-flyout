@@ -15,6 +15,8 @@ internal sealed class BrightnessController : IDisposable
     private readonly DdcCiMonitorService _monitor = new();
     private readonly KeyboardHookService _hook;
     private readonly DispatcherQueue _dispatcherQueue;
+    private readonly DispatcherQueueTimer _suppressWatchdog;
+    private readonly DispatcherQueueTimer _restoreTimer;
 
     /// <summary>Raised (on the UI thread) whenever the brightness value changes.</summary>
     public event Action<int>? BrightnessChanged;
@@ -28,7 +30,34 @@ internal sealed class BrightnessController : IDisposable
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         _hook = new KeyboardHookService(settings);
         _hook.BrightnessStepRequested += OnBrightnessStepRequested;
-        _osd.AutoHidden += NativeOsdSuppressor.Restore;
+        _osd.AutoHidden += OnOsdAutoHidden;
+
+        // Explorer can create the native OSD island a moment *after* the key press,
+        // so a single suppress attempt can miss it. While our OSD is visible, keep
+        // retrying until the native one is actually hidden.
+        _suppressWatchdog = _dispatcherQueue.CreateTimer();
+        _suppressWatchdog.Interval = TimeSpan.FromMilliseconds(150);
+        _suppressWatchdog.Tick += (_, _) =>
+        {
+            if (!NativeOsdSuppressor.IsSuppressed)
+            {
+                NativeOsdSuppressor.Suppress();
+            }
+        };
+
+        // Bring the native OSD back only after our flyout has fully disappeared,
+        // otherwise both are on screen at once.
+        _restoreTimer = _dispatcherQueue.CreateTimer();
+        _restoreTimer.IsRepeating = false;
+        _restoreTimer.Interval = TimeSpan.FromMilliseconds(400);
+        _restoreTimer.Tick += (_, _) => NativeOsdSuppressor.Restore();
+    }
+
+    private void OnOsdAutoHidden()
+    {
+        _suppressWatchdog.Stop();
+        _restoreTimer.Stop();
+        _restoreTimer.Start();
     }
 
     public void Start()
@@ -56,6 +85,8 @@ internal sealed class BrightnessController : IDisposable
             // Hide the native Windows OSD only for the short window in which it
             // could appear; restored on OSD auto-hide and on app exit.
             NativeOsdSuppressor.Suppress();
+            _restoreTimer.Stop();
+            _suppressWatchdog.Start();
 
             _osd.ShowBrightness(value);
             BrightnessChanged?.Invoke(value);
@@ -82,7 +113,9 @@ internal sealed class BrightnessController : IDisposable
 
     public void Dispose()
     {
-        _osd.AutoHidden -= NativeOsdSuppressor.Restore;
+        _osd.AutoHidden -= OnOsdAutoHidden;
+        _suppressWatchdog.Stop();
+        _restoreTimer.Stop();
         _hook.Dispose();
         NativeOsdSuppressor.Restore();
     }

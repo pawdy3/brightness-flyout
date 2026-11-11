@@ -46,7 +46,7 @@ internal static class NativeOsdSuppressor
                 continue;
             }
 
-            NativeMethods.ShowWindow(hwndInputClass, NativeMethods.SW_RESTORE);
+            NativeMethods.ShowWindow(hwndInputClass, NativeMethods.SW_SHOWNOACTIVATE);
             if (NativeMethods.GetWindowRect(hwndInputClass, out var rect))
             {
                 if (rect is { Top: 0, Left: 0, Bottom: 0, Right: 0 })
@@ -71,7 +71,9 @@ internal static class NativeOsdSuppressor
             _originalExStyle | NativeMethods.WS_EX_LAYERED | NativeMethods.WS_EX_TRANSPARENT);
         NativeMethods.SetWindowPos(_nativeOsdElement, IntPtr.Zero, -99999, -99999, 0, 0,
             NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
-        NativeMethods.ShowWindow(_nativeOsdElement, NativeMethods.SW_MINIMIZE);
+        // Minimize without activating: plain SW_MINIMIZE would make Windows move
+        // foreground focus to whatever is next in the Z-order.
+        NativeMethods.ShowWindow(_nativeOsdElement, NativeMethods.SW_SHOWMINNOACTIVE);
     }
 
     public static void Restore()
@@ -84,7 +86,8 @@ internal static class NativeOsdSuppressor
         NativeMethods.SetWindowLongPtr(_nativeOsdElement, NativeMethods.GWL_EXSTYLE, _originalExStyle);
         NativeMethods.SetWindowPos(_nativeOsdElement, IntPtr.Zero, 0, 0, 0, 0,
             NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
-        NativeMethods.ShowWindow(_nativeOsdElement, NativeMethods.SW_RESTORE);
+        // Restore without activating: SW_RESTORE would steal foreground focus.
+        NativeMethods.ShowWindow(_nativeOsdElement, NativeMethods.SW_SHOWNOACTIVATE);
         _nativeOsdElement = IntPtr.Zero;
     }
 }

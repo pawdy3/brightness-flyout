@@ -25,6 +25,8 @@ internal static class NativeMethods
     public const long WS_EX_NOACTIVATE = 0x08000000;
 
     public const int SW_HIDE = 0;
+    public const int SW_SHOWNOACTIVATE = 4;
+    public const int SW_SHOWMINNOACTIVE = 7;
     public const int SW_SHOWNA = 8;
     public const int SW_RESTORE = 9;
     public const int SW_MINIMIZE = 6;
@@ -50,6 +52,9 @@ internal static class NativeMethods
 
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     public const int DWMWCP_ROUND = 2;
+    public const int DWMWA_BORDER_COLOR = 34;
+    /// <summary>DWMWA_COLOR_NONE - suppresses the DWM-drawn window border.</summary>
+    public const int DWMWA_COLOR_NONE = unchecked((int)0xFFFFFFFE);
 
     public const byte VCP_CODE_LUMINANCE = 0x10;
 

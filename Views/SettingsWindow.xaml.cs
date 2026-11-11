@@ -57,6 +57,7 @@ public sealed partial class SettingsWindow : Window
         FillComboBox.SelectedIndex = (int)_settings.FillStyle;
         BackgroundColorPicker.Color = ParseColorOrDefault(_settings.CustomBackgroundColor, Color.FromArgb(0xE6, 0x1F, 0x1F, 0x1F));
         FillColorPicker.Color = ParseColorOrDefault(_settings.CustomFillColor, Color.FromArgb(0xFF, 0xF5, 0xC5, 0x42));
+        PercentToggle.IsOn = _settings.ShowPercentText;
         UpdateColorPickerVisibility();
 
         if (_app.Controller.Monitor.CurrentBrightness is { } brightness)
@@ -67,14 +68,15 @@ public sealed partial class SettingsWindow : Window
         ApplyTheme();
     }
 
+    /// <summary>Applies the app's effective theme (system theme is tracked by App).</summary>
+    public void SetTheme(ElementTheme theme)
+    {
+        Root.RequestedTheme = theme;
+    }
+
     private void ApplyTheme()
     {
-        Root.RequestedTheme = _settings.Theme switch
-        {
-            AppTheme.Light => ElementTheme.Light,
-            AppTheme.Dark => ElementTheme.Dark,
-            _ => ElementTheme.Default
-        };
+        SetTheme(_app.EffectiveTheme());
     }
 
     private void UpdateMonitorStatus()
@@ -198,6 +200,14 @@ public sealed partial class SettingsWindow : Window
     private void OnPreviewClick(object sender, RoutedEventArgs e)
     {
         _app.Controller.PreviewOsd();
+    }
+
+    private void OnPercentToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_initializing)
+        {
+            _settings.ShowPercentText = PercentToggle.IsOn;
+        }
     }
 
     #endregion

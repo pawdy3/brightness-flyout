@@ -16,6 +16,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <FontIcon
@@ -41,6 +42,16 @@
                         </Border.RenderTransform>
                     </Border>
                 </Grid>
+
+                <TextBlock
+                    x:Name="PercentText"
+                    Grid.Column="2"
+                    Width="38"
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text=""
+                    TextAlignment="Right" />
             </Grid>
         </Border>
     </Grid>

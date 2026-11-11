@@ -26,6 +26,7 @@ public sealed partial class OsdWindow : Window
     private readonly DispatcherQueueTimer _hideTimer;
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
+    private bool _isDark = true;
 
     public IntPtr Hwnd => _hwnd;
 
@@ -61,6 +62,12 @@ public sealed partial class OsdWindow : Window
         NativeMethods.DwmSetWindowAttribute(_hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE,
             ref cornerPreference, sizeof(int));
 
+        // Suppress the DWM-drawn 1px window border, otherwise it shows up as a
+        // light outline around the dark flyout.
+        int borderColor = NativeMethods.DWMWA_COLOR_NONE;
+        NativeMethods.DwmSetWindowAttribute(_hwnd, NativeMethods.DWMWA_BORDER_COLOR,
+            ref borderColor, sizeof(int));
+
         ResizeAndReposition();
 
         _hideTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
@@ -78,9 +85,19 @@ public sealed partial class OsdWindow : Window
         NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_HIDE);
     }
 
+    /// <summary>Pushes an explicit theme (system theme tracked by App).</summary>
+    public void SetTheme(ElementTheme theme)
+    {
+        Root.RequestedTheme = theme;
+        _isDark = theme == ElementTheme.Dark;
+        ApplyAppearance();
+    }
+
     public void ShowBrightness(int value)
     {
-        FillScale.ScaleX = Math.Clamp(value, 0, 100) / 100.0;
+        value = Math.Clamp(value, 0, 100);
+        FillScale.ScaleX = value / 100.0;
+        PercentText.Text = $"{value}%";
 
         ResizeAndReposition();
         NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_SHOWNA);
@@ -116,11 +133,11 @@ public sealed partial class OsdWindow : Window
     {
         switch (e.PropertyName)
         {
-            case nameof(SettingsService.Theme):
             case nameof(SettingsService.BackgroundStyle):
             case nameof(SettingsService.CustomBackgroundColor):
             case nameof(SettingsService.FillStyle):
             case nameof(SettingsService.CustomFillColor):
+            case nameof(SettingsService.ShowPercentText):
                 DispatcherQueue.TryEnqueue(ApplyAppearance);
                 break;
         }
@@ -128,23 +145,11 @@ public sealed partial class OsdWindow : Window
 
     public void ApplyAppearance()
     {
-        Root.RequestedTheme = _settings.Theme switch
-        {
-            AppTheme.Light => ElementTheme.Light,
-            AppTheme.Dark => ElementTheme.Dark,
-            _ => ElementTheme.Default
-        };
-
-        var isDark = Root.RequestedTheme switch
-        {
-            ElementTheme.Dark => true,
-            ElementTheme.Light => false,
-            _ => Application.Current.RequestedTheme == ApplicationTheme.Dark
-        };
-
-        // Chrome approximating the native Win11 flyout resources.
-        var stroke = isDark ? Color.FromArgb(0x17, 255, 255, 255) : Color.FromArgb(0x12, 0, 0, 0);
-        var track = isDark ? Color.FromArgb(0x26, 255, 255, 255) : Color.FromArgb(0x26, 0, 0, 0);
+        // Chrome approximating the native Win11 flyout stroke. Pre-blended opaque
+        // colors: translucent strokes composite against the acrylic backdrop and
+        // end up looking like a bright outline in dark mode.
+        var stroke = _isDark ? Color.FromArgb(0xFF, 0x3B, 0x3B, 0x3B) : Color.FromArgb(0xFF, 0xD8, 0xD8, 0xD8);
+        var track = _isDark ? Color.FromArgb(0x26, 255, 255, 255) : Color.FromArgb(0x26, 0, 0, 0);
         var accent = (Color)Application.Current.Resources["SystemAccentColor"];
 
         Panel.BorderBrush = new SolidColorBrush(stroke);
@@ -159,6 +164,8 @@ public sealed partial class OsdWindow : Window
             && TryParseColor(_settings.CustomFillColor, out var fill)
                 ? new SolidColorBrush(fill)
                 : new SolidColorBrush(accent);
+
+        PercentText.Visibility = _settings.ShowPercentText ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static bool TryParseColor(string text, out Color color)

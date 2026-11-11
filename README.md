@@ -16,7 +16,8 @@ built-in one.
     these never surface as virtual keys, so this is the path that makes real
     brightness keys work. Held keys auto-repeat.
 - **Custom OSD** replicating the Windows 11 flyout: borderless, always-on-top,
-  non-activatable, acrylic-backed pill anchored bottom-center above the taskbar.
+  non-activatable, acrylic-backed pill anchored bottom-center above the taskbar,
+  with a percentage readout (can be hidden in Settings).
 - **Transient native OSD suppression**: while the custom OSD is shown, the built-in
   shell OSD (the `XamlExplorerHostIslandWindow` XAML island) is hidden using the
   FluentFlyout/HideVolumeOSD technique — but only for the duration of the OSD, and

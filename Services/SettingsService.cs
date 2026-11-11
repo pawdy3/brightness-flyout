@@ -100,6 +100,10 @@ public partial class SettingsService : ObservableObject
     [property: JsonPropertyName("customFillColor")]
     private string _customFillColor = "#FFF5C542";
 
+    [ObservableProperty]
+    [property: JsonPropertyName("showPercentText")]
+    private bool _showPercentText = true;
+
     partial void OnBrightnessStepChanged(int value) => BrightnessStep = Math.Clamp(value, 1, 50);
     partial void OnOsdDurationMsChanged(int value) => OsdDurationMs = Math.Clamp(value, 500, 10000);
 
@@ -132,6 +136,7 @@ public partial class SettingsService : ObservableObject
                     CustomBackgroundColor = loaded.CustomBackgroundColor;
                     FillStyle = loaded.FillStyle;
                     CustomFillColor = loaded.CustomFillColor;
+                    ShowPercentText = loaded.ShowPercentText;
                 }
             }
         }
