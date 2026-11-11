@@ -67,17 +67,15 @@ public sealed partial class OsdWindow : Window
         _frameSubclassProc = FrameSubclassProc;
         NativeMethods.SetWindowSubclass(_hwnd, _frameSubclassProc, (UIntPtr)2, UIntPtr.Zero);
 
-        EnsureCleanFrame();
+        // Keep it out of Alt+Tab and never let it take focus.
+        var exStyle = NativeMethods.GetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE);
+        NativeMethods.SetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE,
+            exStyle | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE);
 
         // Rounded window corners on Windows 11.
         int cornerPreference = NativeMethods.DWMWCP_ROUND;
         NativeMethods.DwmSetWindowAttribute(_hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE,
             ref cornerPreference, sizeof(int));
-
-        // Suppress the DWM-drawn 1px window border.
-        int borderColor = NativeMethods.DWMWA_COLOR_NONE;
-        NativeMethods.DwmSetWindowAttribute(_hwnd, NativeMethods.DWMWA_BORDER_COLOR,
-            ref borderColor, sizeof(int));
 
         ResizeAndReposition();
 
@@ -226,40 +224,8 @@ public sealed partial class OsdWindow : Window
         return NativeMethods.DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
-    private void EnsureCleanFrame()
-    {
-        const long unwantedStyle = NativeMethods.WS_DLGFRAME | NativeMethods.WS_BORDER | NativeMethods.WS_THICKFRAME;
-        var style = NativeMethods.GetWindowLongPtr(_hwnd, NativeMethods.GWL_STYLE);
-        var exStyle = NativeMethods.GetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE);
-        const long unwantedEx = NativeMethods.WS_EX_WINDOWEDGE;
-        const long requiredEx = NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE;
-
-        bool changed = false;
-        if ((style & unwantedStyle) != 0)
-        {
-            NativeMethods.SetWindowLongPtr(_hwnd, NativeMethods.GWL_STYLE, style & ~unwantedStyle);
-            changed = true;
-        }
-
-        var newEx = (exStyle & ~unwantedEx) | requiredEx;
-        if (newEx != exStyle)
-        {
-            NativeMethods.SetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE, newEx);
-            changed = true;
-        }
-
-        if (changed)
-        {
-            NativeMethods.SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
-                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER
-                | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_FRAMECHANGED);
-        }
-    }
-
     private void ResizeAndReposition()
     {
-        EnsureCleanFrame();
-
         double scale = NativeMethods.GetDpiForWindow(_hwnd) / 96.0;
         int width = (int)Math.Round(WidthDip * scale);
 

@@ -19,10 +19,14 @@
                 FontSize="13"
                 FontWeight="SemiBold"
                 Text="BrightFlyout Settings" />
+            <Border
+                Height="1"
+                VerticalAlignment="Bottom"
+                Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
         </Grid>
 
         <ScrollViewer Grid.Row="1" Padding="16,0,16,16">
-            <StackPanel Spacing="12" MaxWidth="560">
+            <StackPanel Spacing="12" MaxWidth="560" HorizontalAlignment="Center">
 
                 <TextBlock
                     FontSize="20"

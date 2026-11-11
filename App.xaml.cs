@@ -97,6 +97,13 @@ public partial class App : Application
         var theme = EffectiveTheme();
         Osd.SetTheme(theme);
         _settingsWindow?.SetTheme(theme);
+
+        if (_trayIcon is not null)
+        {
+            // The tray menu (SecondWindow mode) follows the TaskbarIcon's ActualTheme;
+            // declared in Application.Resources it would otherwise default to light.
+            _trayIcon.RequestedTheme = theme;
+        }
     }
 
     private void OnBrightnessChanged(int value)

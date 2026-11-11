@@ -19,15 +19,10 @@ internal static class NativeMethods
     public const int WM_INPUT = 0x00FF;
     public const int WM_NCCALCSIZE = 0x0083;
 
-    public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;
-    public const long WS_BORDER = 0x00800000;
-    public const long WS_DLGFRAME = 0x00400000;
-    public const long WS_THICKFRAME = 0x00040000;
     public const long WS_EX_LAYERED = 0x00080000;
     public const long WS_EX_TRANSPARENT = 0x00000020;
     public const long WS_EX_TOOLWINDOW = 0x00000080;
-    public const long WS_EX_WINDOWEDGE = 0x00000100;
     public const long WS_EX_NOACTIVATE = 0x08000000;
 
     public const int SW_HIDE = 0;
@@ -38,10 +33,8 @@ internal static class NativeMethods
     public const int SW_MINIMIZE = 6;
 
     public const uint SWP_NOSIZE = 0x0001;
-    public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
-    public const uint SWP_FRAMECHANGED = 0x0020;
 
     public const uint MONITOR_DEFAULTTOPRIMARY = 0x00000001;
     public const int MONITORINFOF_PRIMARY = 0x00000001;
@@ -58,11 +51,9 @@ internal static class NativeMethods
     public const int HIDP_INPUT = 0;
     public const int HIDP_STATUS_SUCCESS = 0x00110000;
 
+    public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     public const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
     public const int DWMWCP_ROUND = 2;
-    public const int DWMWA_BORDER_COLOR = 34;
-    /// <summary>DWMWA_COLOR_NONE - suppresses the DWM-drawn window border.</summary>
-    public const int DWMWA_COLOR_NONE = unchecked((int)0xFFFFFFFE);
 
     public const byte VCP_CODE_LUMINANCE = 0x10;
 
