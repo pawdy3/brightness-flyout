@@ -17,6 +17,7 @@ internal static class NativeMethods
     public const int WM_SYSKEYDOWN = 0x0104;
     public const int WM_SYSKEYUP = 0x0105;
     public const int WM_INPUT = 0x00FF;
+    public const int WM_NCCALCSIZE = 0x0083;
 
     public const int GWL_STYLE = -16;
     public const int GWL_EXSTYLE = -20;

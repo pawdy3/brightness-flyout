@@ -34,6 +34,7 @@ public sealed partial class OsdWindow : Window
     private bool _isDark = true;
     private bool _isExpanded;
     private bool _pointerInside;
+    private NativeMethods.SubclassProc? _frameSubclassProc;
 
     public IntPtr Hwnd => _hwnd;
 
@@ -59,9 +60,13 @@ public sealed partial class OsdWindow : Window
         presenter.IsAlwaysOnTop = true;
         _appWindow.SetPresenter(presenter);
 
-        // SetBorderAndTitleBar leaves WS_DLGFRAME/WS_EX_WINDOWEDGE behind, and DWM
-        // draws those as a bright ring around the window. The presenter also
-        // re-applies its styles lazily, so the cleanup must run on every show.
+        // The OverlappedPresenter leaves WS_DLGFRAME on the window (and enforces it,
+        // reverting SetWindowLongPtr changes). DWM draws that as a bright ring around
+        // the flyout. The reliable fix is to remove the non-client area entirely via
+        // WM_NCCALCSIZE so the XAML content covers the whole window.
+        _frameSubclassProc = FrameSubclassProc;
+        NativeMethods.SetWindowSubclass(_hwnd, _frameSubclassProc, (UIntPtr)2, UIntPtr.Zero);
+
         EnsureCleanFrame();
 
         // Rounded window corners on Windows 11.
@@ -209,6 +214,18 @@ public sealed partial class OsdWindow : Window
 
     #endregion
 
+    private IntPtr FrameSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, UIntPtr dwRefData)
+    {
+        if (uMsg == NativeMethods.WM_NCCALCSIZE && wParam != IntPtr.Zero)
+        {
+            // wParam == TRUE: returning 0 makes the client area cover the whole
+            // window, leaving DWM no non-client frame to paint.
+            return IntPtr.Zero;
+        }
+
+        return NativeMethods.DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+
     private void EnsureCleanFrame()
     {
         const long unwantedStyle = NativeMethods.WS_DLGFRAME | NativeMethods.WS_BORDER | NativeMethods.WS_THICKFRAME;
@@ -285,14 +302,14 @@ public sealed partial class OsdWindow : Window
 
     public void ApplyAppearance()
     {
-        // Chrome approximating the native Win11 flyout stroke. Pre-blended opaque
-        // colors: translucent strokes composite against the acrylic backdrop and
-        // end up looking like a bright outline in dark mode.
-        var stroke = _isDark ? Color.FromArgb(0xFF, 0x3B, 0x3B, 0x3B) : Color.FromArgb(0xFF, 0xD8, 0xD8, 0xD8);
+        // No stroke at all: any border brush (even near-black) reads as a light
+        // outline against the acrylic, and the native OSD has no visible border.
+        Panel.BorderThickness = new Thickness(0);
+        Panel.BorderBrush = new SolidColorBrush(Colors.Transparent);
+
         var track = _isDark ? Color.FromArgb(0x26, 255, 255, 255) : Color.FromArgb(0x26, 0, 0, 0);
         var accent = (Color)Application.Current.Resources["SystemAccentColor"];
 
-        Panel.BorderBrush = new SolidColorBrush(stroke);
         TrackBar.Background = new SolidColorBrush(track);
 
         Panel.Background = _settings.BackgroundStyle == OsdBackgroundStyle.SolidColor
