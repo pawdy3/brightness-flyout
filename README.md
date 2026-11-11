@@ -46,6 +46,27 @@ dotnet build -c Debug -p:Platform=x64 -r win-x64
 
 The app lives in the system tray (sun icon). Right-click → **Settings**.
 
+## Distribution
+
+CI (`.github/workflows/build.yml`) publishes a **self-contained single-file
+`BrightFlyout.exe`** (~200 MB, no .NET or Windows App SDK runtime required) as a
+workflow artifact on every push, and attaches it to a GitHub Release when a `v*`
+tag is pushed:
+
+```powershell
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Local equivalent:
+
+```powershell
+dotnet publish -c Release -p:Platform=x64 -r win-x64 --self-contained `
+  -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=true `
+  -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableMsixTooling=true
+# -> bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\publish\BrightFlyout.exe
+```
+
 ## Notes
 
 - Only the **primary** display is controlled (single-display scope by design).
