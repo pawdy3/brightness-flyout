@@ -18,6 +18,7 @@ public sealed partial class SettingsWindow : Window
     private readonly App _app;
     private readonly SettingsService _settings;
     private readonly IntPtr _hwnd;
+    private readonly AppWindow _appWindow;
     private bool _initializing = true;
     private bool _sliderUpdating;
 
@@ -33,8 +34,8 @@ public sealed partial class SettingsWindow : Window
 
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         var windowId = Win32Interop.GetWindowIdFromWindow(_hwnd);
-        var appWindow = AppWindow.GetFromWindowId(windowId);
-        appWindow.Resize(new Windows.Graphics.SizeInt32(620, 900));
+        _appWindow = AppWindow.GetFromWindowId(windowId);
+        _appWindow.Resize(new Windows.Graphics.SizeInt32(620, 900));
 
         DisplayStatusItems.ItemsSource = _app.Controller.Displays.Displays;
         DefaultMonitorComboBox.ItemsSource = _app.Controller.Displays.Displays;
@@ -93,10 +94,32 @@ public sealed partial class SettingsWindow : Window
     {
         Root.RequestedTheme = theme;
 
-        // Without this the caption buttons (min/max/close) keep light-theme glyphs.
+        // Without this the window frame keeps light-theme colors.
         int useDark = theme == ElementTheme.Dark ? 1 : 0;
         Native.NativeMethods.DwmSetWindowAttribute(
             _hwnd, Native.NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
+
+        // The caption buttons are rendered by WinUI, not DWM, so they need their
+        // colors set explicitly - otherwise they stay black on a dark title bar.
+        var titleBar = _appWindow.TitleBar;
+        if (theme == ElementTheme.Dark)
+        {
+            titleBar.ButtonForegroundColor = Colors.White;
+            titleBar.ButtonHoverForegroundColor = Colors.White;
+            titleBar.ButtonPressedForegroundColor = Colors.White;
+            titleBar.ButtonBackgroundColor = Colors.Transparent;
+            titleBar.ButtonHoverBackgroundColor = Color.FromArgb(0x19, 0xFF, 0xFF, 0xFF);
+            titleBar.ButtonPressedBackgroundColor = Color.FromArgb(0x2D, 0xFF, 0xFF, 0xFF);
+        }
+        else
+        {
+            titleBar.ButtonForegroundColor = Color.FromArgb(0xFF, 0x1B, 0x1B, 0x1B);
+            titleBar.ButtonHoverForegroundColor = Colors.Black;
+            titleBar.ButtonPressedForegroundColor = Colors.Black;
+            titleBar.ButtonBackgroundColor = Colors.Transparent;
+            titleBar.ButtonHoverBackgroundColor = Color.FromArgb(0x19, 0x00, 0x00, 0x00);
+            titleBar.ButtonPressedBackgroundColor = Color.FromArgb(0x2D, 0x00, 0x00, 0x00);
+        }
     }
 
     private void ApplyTheme()
