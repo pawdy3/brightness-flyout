@@ -29,15 +29,12 @@ internal static class NativeMethods
     public const int SW_SHOWNOACTIVATE = 4;
     public const int SW_SHOWMINNOACTIVE = 7;
     public const int SW_SHOWNA = 8;
-    public const int SW_RESTORE = 9;
-    public const int SW_MINIMIZE = 6;
 
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOZORDER = 0x0004;
     public const uint SWP_NOACTIVATE = 0x0010;
 
     public const uint MONITOR_DEFAULTTOPRIMARY = 0x00000001;
-    public const int MONITORINFOF_PRIMARY = 0x00000001;
 
     public const ushort HID_USAGE_PAGE_CONSUMER = 0x0C;
     public const ushort HID_USAGE_CONSUMER_CONTROL = 0x01;
@@ -62,13 +59,6 @@ internal static class NativeMethods
     #region Structs
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct POINT
-    {
-        public int X;
-        public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
     public struct RECT
     {
         public int Left;
@@ -77,15 +67,6 @@ internal static class NativeMethods
         public int Bottom;
         public readonly int Width => Right - Left;
         public readonly int Height => Bottom - Top;
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct MONITORINFO
-    {
-        public int cbSize;
-        public RECT rcMonitor;
-        public RECT rcWork;
-        public int dwFlags;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -143,12 +124,6 @@ internal static class NativeMethods
 
     [DllImport("user32.dll")]
     public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
-
-    [DllImport("user32.dll")]
-    public static extern IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFO lpmi);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFOEX lpmi);

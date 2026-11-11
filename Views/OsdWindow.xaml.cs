@@ -152,11 +152,6 @@ public sealed partial class OsdWindow : Window
         PercentText.Text = $"{value}%";
     }
 
-    public void HideNow()
-    {
-        _hideTimer.Stop();
-        NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_HIDE);
-    }
 
     #region Expand / collapse
 
@@ -239,13 +234,9 @@ public sealed partial class OsdWindow : Window
 
         int height = (int)Math.Round(heightDip * scale);
 
-        var hMonitor = NativeMethods.MonitorFromPoint(
-            new NativeMethods.POINT { X = 0, Y = 0 }, NativeMethods.MONITOR_DEFAULTTOPRIMARY);
-        var info = new NativeMethods.MONITORINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>() };
-        NativeMethods.GetMonitorInfoW(hMonitor, ref info);
-
-        int x = info.rcWork.Left + (info.rcWork.Width - width) / 2;
-        int y = info.rcWork.Bottom - height - (int)Math.Round(BottomMarginDip * scale);
+        var workArea = DisplayArea.Primary.WorkArea;
+        int x = workArea.X + (workArea.Width - width) / 2;
+        int y = workArea.Y + workArea.Height - height - (int)Math.Round(BottomMarginDip * scale);
         _appWindow.MoveAndResize(new RectInt32(x, y, width, height));
     }
 

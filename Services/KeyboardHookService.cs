@@ -70,21 +70,23 @@ internal sealed class KeyboardHookService : IDisposable
         if (nCode >= 0)
         {
             var msg = wParam.ToInt32();
-            if (msg is NativeMethods.WM_KEYDOWN or NativeMethods.WM_SYSKEYDOWN)
+            if (msg is NativeMethods.WM_KEYDOWN or NativeMethods.WM_SYSKEYDOWN
+                or NativeMethods.WM_KEYUP or NativeMethods.WM_SYSKEYUP)
             {
                 var data = Marshal.PtrToStructure<NativeMethods.KBDLLHOOKSTRUCT>(lParam);
                 var downVk = SettingsService.ParseVkCode(_settings.BrightnessDownVk, -1);
                 var upVk = SettingsService.ParseVkCode(_settings.BrightnessUpVk, -1);
+                bool isDown = msg is NativeMethods.WM_KEYDOWN or NativeMethods.WM_SYSKEYDOWN;
 
-                if (data.vkCode == downVk)
+                if (data.vkCode == downVk || data.vkCode == upVk)
                 {
-                    Dispatch(BrightnessDirection.Down);
-                    return (IntPtr)1; // swallow
-                }
+                    // Swallow the key-up too: passing it through alone would leak a
+                    // key release for a press the shell never saw.
+                    if (isDown)
+                    {
+                        Dispatch(data.vkCode == downVk ? BrightnessDirection.Down : BrightnessDirection.Up);
+                    }
 
-                if (data.vkCode == upVk)
-                {
-                    Dispatch(BrightnessDirection.Up);
                     return (IntPtr)1;
                 }
             }

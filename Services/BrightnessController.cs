@@ -28,7 +28,7 @@ internal sealed class BrightnessController : IDisposable
         _settings = settings;
         _osd = osd;
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-        Displays = new DisplayManager(settings, _dispatcherQueue);
+        Displays = new DisplayManager(settings);
         Displays.Changed += OnDisplaysChanged;
 
         _hook = new KeyboardHookService(settings);

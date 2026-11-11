@@ -11,7 +11,7 @@ public partial class App : Application
     private Mutex? _singleInstanceMutex;
     private TaskbarIcon? _trayIcon;
     private SettingsWindow? _settingsWindow;
-    private SystemThemeService? _systemTheme;
+    private ThemeService? _themeService;
 
     internal SettingsService Settings { get; private set; } = null!;
     internal BrightnessController Controller { get; private set; } = null!;
@@ -68,15 +68,9 @@ public partial class App : Application
 
         // WinUI 3 doesn't track OS theme switches for ElementTheme.Default at
         // runtime - push explicit themes to all windows ourselves.
-        _systemTheme = new SystemThemeService();
-        _systemTheme.Changed += () => Osd.DispatcherQueue.TryEnqueue(ApplyThemeToWindows);
-        Settings.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName is nameof(SettingsService.Theme))
-            {
-                ApplyThemeToWindows();
-            }
-        };
+        _themeService = new ThemeService(Settings);
+        _themeService.EffectiveThemeChanged += () =>
+            Osd.DispatcherQueue.TryEnqueue(ApplyThemeToWindows);
         ApplyThemeToWindows();
 
         if (Environment.GetCommandLineArgs().Contains("--open-settings"))
@@ -85,12 +79,8 @@ public partial class App : Application
         }
     }
 
-    internal ElementTheme EffectiveTheme() => Settings.Theme switch
-    {
-        AppTheme.Light => ElementTheme.Light,
-        AppTheme.Dark => ElementTheme.Dark,
-        _ => _systemTheme?.IsDark == true ? ElementTheme.Dark : ElementTheme.Light
-    };
+    internal ElementTheme EffectiveTheme() =>
+        _themeService?.EffectiveTheme ?? ElementTheme.Default;
 
     internal void ApplyThemeToWindows()
     {

@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using BrightFlyout.ViewModels;
-using Microsoft.UI.Dispatching;
 
 namespace BrightFlyout.Services.Displays;
 
@@ -13,17 +12,15 @@ namespace BrightFlyout.Services.Displays;
 public sealed class DisplayManager
 {
     private readonly SettingsService _settings;
-    private readonly DispatcherQueue _dispatcherQueue;
 
     public ObservableCollection<DisplayViewModel> Displays { get; } = new();
 
     /// <summary>Raised on the UI thread when the display list or a value changes.</summary>
     public event Action? Changed;
 
-    public DisplayManager(SettingsService settings, DispatcherQueue dispatcherQueue)
+    public DisplayManager(SettingsService settings)
     {
         _settings = settings;
-        _dispatcherQueue = dispatcherQueue;
     }
 
     /// <summary>The display targeted by the keyboard. "Last touched" in multi-display

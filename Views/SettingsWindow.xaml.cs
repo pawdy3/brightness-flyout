@@ -94,32 +94,9 @@ public sealed partial class SettingsWindow : Window
     {
         Root.RequestedTheme = theme;
 
-        // Without this the window frame keeps light-theme colors.
-        int useDark = theme == ElementTheme.Dark ? 1 : 0;
-        Native.NativeMethods.DwmSetWindowAttribute(
-            _hwnd, Native.NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
-
-        // The caption buttons are rendered by WinUI, not DWM, so they need their
-        // colors set explicitly - otherwise they stay black on a dark title bar.
-        var titleBar = _appWindow.TitleBar;
-        if (theme == ElementTheme.Dark)
-        {
-            titleBar.ButtonForegroundColor = Colors.White;
-            titleBar.ButtonHoverForegroundColor = Colors.White;
-            titleBar.ButtonPressedForegroundColor = Colors.White;
-            titleBar.ButtonBackgroundColor = Colors.Transparent;
-            titleBar.ButtonHoverBackgroundColor = Color.FromArgb(0x19, 0xFF, 0xFF, 0xFF);
-            titleBar.ButtonPressedBackgroundColor = Color.FromArgb(0x2D, 0xFF, 0xFF, 0xFF);
-        }
-        else
-        {
-            titleBar.ButtonForegroundColor = Color.FromArgb(0xFF, 0x1B, 0x1B, 0x1B);
-            titleBar.ButtonHoverForegroundColor = Colors.Black;
-            titleBar.ButtonPressedForegroundColor = Colors.Black;
-            titleBar.ButtonBackgroundColor = Colors.Transparent;
-            titleBar.ButtonHoverBackgroundColor = Color.FromArgb(0x19, 0x00, 0x00, 0x00);
-            titleBar.ButtonPressedBackgroundColor = Color.FromArgb(0x2D, 0x00, 0x00, 0x00);
-        }
+        var isDark = theme == ElementTheme.Dark;
+        ThemeService.ApplyDarkModeFrame(_hwnd, isDark);
+        ThemeService.ApplyCaptionButtonColors(_appWindow, isDark);
     }
 
     private void ApplyTheme()
