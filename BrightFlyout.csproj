@@ -20,6 +20,10 @@
     <NoWarn>$(NoWarn);MVVMTK0045</NoWarn>
   </PropertyGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\app.ico" LogicalName="BrightFlyout.app.ico" />
+  </ItemGroup>
+
   <!-- Pinned for reproducible CI builds. -->
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260921001" />

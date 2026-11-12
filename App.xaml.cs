@@ -1,10 +1,9 @@
 using BrightFlyout.Services;
 using BrightFlyout.Views;
+using CommunityToolkit.Mvvm.Input;
 using H.NotifyIcon;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using Windows.UI;
 
 namespace BrightFlyout;
 
@@ -53,6 +52,7 @@ public partial class App : Application
         // Fixed ID so Windows remembers the icon's tray placement across restarts.
         _trayIcon.Id = new Guid("3F6B2A11-9C4E-4A5D-8E2F-1C7D9B0A6E55");
         SetTrayIcon();
+        _trayIcon.DoubleClickCommand = new RelayCommand(OpenSettings);
         _trayIcon.ForceCreate();
 
         // Events can't be wired in Application XAML; build the menu in code.
@@ -116,23 +116,18 @@ public partial class App : Application
     {
         try
         {
-            // Segoe Fluent Icons only exists on Windows 11; MDL2 Assets is the Win10
-            // equivalent. SkiaSharp (which renders GeneratedIconSource) doesn't support
-            // comma-separated fallback lists, so the family must be chosen explicitly.
-            var family = IsWindows11 ? "Segoe Fluent Icons" : "Segoe MDL2 Assets";
-            _trayIcon!.IconSource = new GeneratedIconSource
-            {
-                Text = "\uE706",
-                FontFamily = new FontFamily(family),
-                Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xF5, 0xC5, 0x42)),
-                Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)),
-                FontSize = 96,
-                Size = 128
-            };
+            // Load the embedded .ico (same sun glyph as the exe icon). This is
+            // synchronous and font-independent: the previous GeneratedIconSource
+            // approach converted to an icon asynchronously, so on slower machines
+            // ForceCreate() raced it and Shell_NotifyIcon(NIM_ADD) failed with a
+            // null icon - killing the app at startup.
+            using var stream = typeof(App).Assembly.GetManifestResourceStream("BrightFlyout.app.ico")
+                ?? throw new InvalidOperationException("Embedded app.ico not found");
+            _trayIcon!.Icon = new System.Drawing.Icon(stream);
         }
         catch (Exception ex)
         {
-            Log("Tray icon generation failed", ex);
+            Log("Tray icon setup failed", ex);
         }
     }
 
