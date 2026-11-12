@@ -23,8 +23,6 @@ internal sealed class BrightnessController : IDisposable
     private NativeMethods.SubclassProc? _displayChangeSubclassProc;
 
     // Excluded-panel revert state (see OnWmiBrightnessChanged).
-    private readonly DispatcherQueueTimer _wmiRevertTimer;
-    private int? _wmiRevertValue;
     private int? _wmiRevertingTo;
 
     /// <summary>Raised (on the UI thread) whenever the target display's brightness changes.</summary>
@@ -70,29 +68,6 @@ internal sealed class BrightnessController : IDisposable
         _hotplugTimer.IsRepeating = false;
         _hotplugTimer.Interval = TimeSpan.FromMilliseconds(800);
         _hotplugTimer.Tick += (_, _) => _ = RefreshDisplaysAsync();
-
-        // When the internal panel is excluded from control, Windows still changes
-        // it on laptop key presses. Revert those changes once the press burst ends.
-        _wmiRevertTimer = _dispatcherQueue.CreateTimer();
-        _wmiRevertTimer.IsRepeating = false;
-        _wmiRevertTimer.Interval = TimeSpan.FromMilliseconds(250);
-        _wmiRevertTimer.Tick += (_, _) =>
-        {
-            if (_wmiRevertValue is not { } revertTo)
-            {
-                return;
-            }
-
-            _wmiRevertValue = null;
-            var wmiDisplay = Displays.Displays.FirstOrDefault(d => d.Controller is WmiDisplayController);
-            if (wmiDisplay is not null)
-            {
-                Log.Write($"Reverting Windows-made change on excluded panel -> {revertTo}%");
-                _wmiRevertingTo = revertTo;
-                wmiDisplay.Controller.SetBrightness(revertTo);
-                wmiDisplay.SetBrightnessSilently(revertTo);
-            }
-        };
     }
 
     private IntPtr DisplayChangeSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, UIntPtr dwRefData)
@@ -221,16 +196,23 @@ internal sealed class BrightnessController : IDisposable
 
             if (!wmiDisplay.IsIncluded)
             {
-                // The panel is excluded, but Windows changed it anyway. Revert the
-                // change (debounced per burst) and forward the key press to the
-                // actual target display instead.
+                // The panel is excluded, but Windows changed it anyway (monitor.sys
+                // handles the ACPI hotkey in kernel mode - there is no user-mode or
+                // registry opt-out). Revert immediately, before the backlight ramp
+                // becomes visible, and forward the press direction to the actual
+                // target display instead. The panel model stays pinned at the
+                // pre-press value.
                 var direction = Math.Sign(value - wmiDisplay.Brightness);
-                _wmiRevertValue ??= wmiDisplay.Brightness;
-                wmiDisplay.SetBrightnessSilently(value);
-                _wmiRevertTimer.Stop();
-                _wmiRevertTimer.Start();
+                if (direction == 0)
+                {
+                    return;
+                }
 
-                if (direction != 0 && Displays.Target is { } target && target != wmiDisplay)
+                Log.Write($"Reverting Windows-made change on excluded panel -> {wmiDisplay.Brightness}%");
+                _wmiRevertingTo = wmiDisplay.Brightness;
+                wmiDisplay.Controller.SetBrightness(wmiDisplay.Brightness);
+
+                if (Displays.Target is { } target && target != wmiDisplay)
                 {
                     var stepped = Math.Clamp(
                         target.Brightness + _settings.BrightnessStep * direction, 0, 100);

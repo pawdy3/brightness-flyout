@@ -18,6 +18,12 @@ internal static class NativeOsdSuppressor
     private static readonly HashSet<IntPtr> _legacyOsdElements = [];
     private static bool _loggedLegacySearch;
 
+    // Out-of-context WinEvent hook, armed while suppression is active. Polling
+    // alone hides the OSD up to a watchdog interval too late (visible flash);
+    // the show-event fires before the window gets to paint.
+    private static IntPtr _winEventHook;
+    private static NativeMethods.WinEventProc? _winEventProc;
+
     public static bool IsSuppressed => _nativeOsdElement != IntPtr.Zero || _legacyOsdElements.Count > 0;
 
     public static void Suppress()
@@ -31,6 +37,59 @@ internal static class NativeOsdSuppressor
         {
             SuppressLegacyOsd();
         }
+
+        ArmShowEventHook();
+    }
+
+    private static void ArmShowEventHook()
+    {
+        if (_winEventHook != IntPtr.Zero)
+        {
+            return;
+        }
+
+        _winEventProc = OnWinEvent; // keep a reference so the GC can't collect the callback
+        _winEventHook = NativeMethods.SetWinEventHook(
+            NativeMethods.EVENT_OBJECT_SHOW, NativeMethods.EVENT_OBJECT_SHOW,
+            IntPtr.Zero, _winEventProc, 0, 0, NativeMethods.WINEVENT_OUTOFCONTEXT);
+    }
+
+    private static void OnWinEvent(IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
+        int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+    {
+        if (idObject != NativeMethods.OBJID_WINDOW || hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // Win11: explorer re-shows the island itself.
+        if (hwnd == _nativeOsdElement)
+        {
+            ApplyWin11Suppression();
+            return;
+        }
+
+        // Win10: the same NativeHWNDHost is re-shown on every key press.
+        if (_legacyOsdElements.Contains(hwnd))
+        {
+            NativeMethods.ShowWindow(hwnd, NativeMethods.SW_HIDE);
+            return;
+        }
+
+        var className = new System.Text.StringBuilder(64);
+        if (NativeMethods.GetClassNameW(hwnd, className, className.Capacity) == 0
+            || className.ToString() != "NativeHWNDHost"
+            || NativeMethods.FindWindowExW(hwnd, IntPtr.Zero, "DirectUIHWND", null) == IntPtr.Zero)
+        {
+            return;
+        }
+
+        if (_legacyOsdElements.Add(hwnd))
+        {
+            Log.Write($"Legacy OSD host hidden: 0x{hwnd.ToInt64():X} (show event)");
+        }
+
+        NativeMethods.ShowWindow(hwnd, NativeMethods.SW_HIDE);
     }
 
     /// <summary>Windows 10 and earlier: the OSD is a DirectUI popup hosted in a
@@ -133,6 +192,12 @@ internal static class NativeOsdSuppressor
 
     public static void Restore()
     {
+        if (_winEventHook != IntPtr.Zero)
+        {
+            NativeMethods.UnhookWinEvent(_winEventHook);
+            _winEventHook = IntPtr.Zero;
+        }
+
         foreach (var hwnd in _legacyOsdElements)
         {
             NativeMethods.ShowWindow(hwnd, NativeMethods.SW_SHOWNOACTIVATE);
