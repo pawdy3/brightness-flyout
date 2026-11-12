@@ -8,7 +8,7 @@
   <Identity
     Name="BrightFlyout"
     Publisher="CN=BrightFlyout"
-    Version="1.0.3.0" />
+    Version="1.0.4.0" />
 
   <Properties>
     <DisplayName>BrightFlyout</DisplayName>

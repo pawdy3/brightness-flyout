@@ -101,6 +101,20 @@ public sealed class DisplayManager
             DdcCiDisplayController.DestroyAll(physical);
         }
 
+        // Some internal panels are not exposed as physical monitors at all, so
+        // nothing above pairs with their WMI instance. Leftover instances are
+        // internal panels: add them directly.
+        int pairedCount = wmiIndex;
+        while (wmiIndex < wmiInstances.Count)
+        {
+            controllers.Add(new WmiDisplayController(wmiInstances[wmiIndex++]));
+        }
+
+        if (wmiInstances.Count > 0)
+        {
+            Log.Write($"WMI brightness instances: {wmiInstances.Count} ({pairedCount} paired to a physical monitor, {wmiInstances.Count - pairedCount} added directly)");
+        }
+
         return controllers;
     }
 
