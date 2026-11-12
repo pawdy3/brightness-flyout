@@ -23,7 +23,11 @@ public partial class DisplayViewModel : ObservableObject
         Controller = controller;
         _setRequested = setRequested;
         _includeChanged = includeChanged;
+        // Suppress: the Brightness setter fires OnBrightnessChanged, which writes
+        // to the hardware and marks the display as target - both wrong at startup.
+        _suppressNotification = true;
         Brightness = controller.CurrentBrightness ?? 50;
+        _suppressNotification = false;
     }
 
     public IDisplayController Controller { get; }
