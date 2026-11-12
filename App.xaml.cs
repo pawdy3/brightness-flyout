@@ -53,7 +53,7 @@ public partial class App : Application
         _trayIcon.Id = new Guid("3F6B2A11-9C4E-4A5D-8E2F-1C7D9B0A6E55");
         SetTrayIcon();
         _trayIcon.DoubleClickCommand = new RelayCommand(OpenSettings);
-        _trayIcon.ForceCreate();
+        TryCreateTrayIcon();
 
         // Events can't be wired in Application XAML; build the menu in code.
         // MinWidth: SecondWindow mode measures flyout items before their templates
@@ -129,6 +129,44 @@ public partial class App : Application
         {
             Log("Tray icon setup failed", ex);
         }
+    }
+
+    private int _trayCreateAttempts;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _trayRetryTimer;
+
+    /// <summary>
+    /// Tray creation must never kill the app. It fails when explorer isn't running
+    /// yet (we start at logon) or the shell rejects the icon; retry a few times -
+    /// H.NotifyIcon also re-creates the icon automatically on TaskbarCreated.
+    /// </summary>
+    private void TryCreateTrayIcon()
+    {
+        try
+        {
+            _trayIcon!.ForceCreate();
+            _trayRetryTimer?.Stop();
+        }
+        catch (Exception ex)
+        {
+            var win32 = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+            Log($"Tray icon creation failed (attempt {_trayCreateAttempts + 1}, win32={win32})", ex);
+
+            if (++_trayCreateAttempts < 10)
+            {
+                _trayRetryTimer ??= InitializeTrayRetryTimer();
+                _trayRetryTimer.Start();
+            }
+        }
+    }
+
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer InitializeTrayRetryTimer()
+    {
+        var queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        var timer = queue.CreateTimer();
+        timer.Interval = TimeSpan.FromSeconds(3);
+        timer.IsRepeating = true;
+        timer.Tick += (_, _) => TryCreateTrayIcon();
+        return timer;
     }
 
     private void OnBrightnessChanged(int value)
