@@ -3,8 +3,14 @@ namespace BrightFlyout.Services;
 /// <summary>Canonical file system locations used by the app.</summary>
 internal static class AppPaths
 {
-    public static readonly string AppDataDirectory = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BrightFlyout");
+    // The BRIGHTFLYOUT_APPDATA override isolates integration-test runs from the
+    // real settings and log.
+    public static readonly string AppDataDirectory =
+        Environment.GetEnvironmentVariable("BRIGHTFLYOUT_APPDATA")
+            is { Length: > 0 } overrideDir
+            ? overrideDir
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BrightFlyout");
 
     public static readonly string SettingsFile = Path.Combine(AppDataDirectory, "settings.json");
     public static readonly string LogFile = Path.Combine(AppDataDirectory, "debug.log");

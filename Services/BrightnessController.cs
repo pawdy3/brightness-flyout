@@ -177,6 +177,7 @@ internal sealed class BrightnessController : IDisposable
             Displays.Target?.SetBrightness(value);
         }
 
+        Log.Write($"Brightness -> {value}% ({Displays.Target?.Name ?? "none"})");
         ApplyOsd(value);
         BrightnessChanged?.Invoke(value);
     }

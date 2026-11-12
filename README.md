@@ -73,6 +73,29 @@ Other dev affordances:
 - The app lives in the system tray (sun icon). Right-click → **Settings**,
   double-click opens Settings directly.
 
+### Integration tests
+
+```powershell
+.\tools\test-integration.ps1               # build Debug, run the suite
+.\tools\test-integration.ps1 -SkipBuild    # reuse the existing Debug build
+```
+
+The suite runs the real app against **simulated in-memory displays**, so no
+DDC/CI hardware is needed. Covered: cold start (hook, display detection),
+single-instance mutex, keyboard injection -> brightness step -> OSD (verified
+by screenshot diff), OSD auto-hide, tray icon registration, settings window.
+Any already-running BrightFlyout instance is killed first.
+
+Test hooks (environment variables, honored at startup):
+
+| Variable | Effect |
+|---|---|
+| `BRIGHTFLYOUT_SIMULATE_DISPLAYS` | two in-memory displays replace hardware enumeration; no DDC/CI or WMI calls |
+| `BRIGHTFLYOUT_APPDATA` | redirects settings.json/debug.log to the given directory |
+
+Exit code is non-zero if any test fails; on failure the isolated app-data
+directory is kept at `%TEMP%\BrightFlyoutIntegrationTests` for inspection.
+
 ### Release builds
 
 The two MSIX variants and their sizes are listed under

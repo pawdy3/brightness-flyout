@@ -59,6 +59,12 @@ public sealed class DisplayManager
 
     private List<IDisplayController> EnumerateControllers()
     {
+        // Integration-test hook: in-memory displays, no hardware touched.
+        if (Environment.GetEnvironmentVariable("BRIGHTFLYOUT_SIMULATE_DISPLAYS") is { Length: > 0 })
+        {
+            return SimulatedDisplayController.CreateSet();
+        }
+
         var controllers = new List<IDisplayController>();
         var wmiInstances = WmiDisplayController.EnumerateInstanceNames();
         int wmiIndex = 0;
