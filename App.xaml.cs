@@ -45,15 +45,31 @@ public partial class App : Application
             return;
         }
 
+        // Version stamp in every debug.log so we can tell builds apart.
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        Log($"BrightFlyout {version} starting on {Environment.OSVersion.Version}");
+
         Settings = new SettingsService();
         Settings.Load();
 
-        _trayIcon = (TaskbarIcon)Resources["TrayIcon"];
-        // Fixed ID so Windows remembers the icon's tray placement across restarts.
-        _trayIcon.Id = new Guid("3F6B2A11-9C4E-4A5D-8E2F-1C7D9B0A6E55");
-        SetTrayIcon();
-        _trayIcon.DoubleClickCommand = new RelayCommand(OpenSettings);
-        TryCreateTrayIcon();
+        try
+        {
+            _trayIcon = (TaskbarIcon)Resources["TrayIcon"];
+        }
+        catch (Exception ex)
+        {
+            // Without the tray icon the app still fully works via the keyboard.
+            Log("TrayIcon resource missing", ex);
+        }
+
+        if (_trayIcon is not null)
+        {
+            // Fixed ID so Windows remembers the icon's tray placement across restarts.
+            _trayIcon.Id = new Guid("3F6B2A11-9C4E-4A5D-8E2F-1C7D9B0A6E55");
+            SetTrayIcon();
+            _trayIcon.DoubleClickCommand = new RelayCommand(OpenSettings);
+            TryCreateTrayIcon();
+        }
 
         // Events can't be wired in Application XAML; build the menu in code.
         // MinWidth: SecondWindow mode measures flyout items before their templates
