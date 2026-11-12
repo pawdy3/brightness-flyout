@@ -31,7 +31,6 @@ internal sealed class BrightnessController : IDisposable
     private string _lastRefreshFingerprint = string.Empty;
 
     // Excluded-panel revert state (see OnWmiBrightnessChanged).
-    private readonly DispatcherQueueTimer _wmiRevertTimer;
     private int? _wmiRevertingTo;
     private int? _lastWmiEventValue;
 
@@ -85,28 +84,6 @@ internal sealed class BrightnessController : IDisposable
         _pollTimer = _dispatcherQueue.CreateTimer();
         _pollTimer.Interval = TimeSpan.FromSeconds(60);
         _pollTimer.Tick += (_, _) => _ = RefreshDisplaysAsync();
-
-        // When the internal panel is excluded from control, Windows still changes
-        // it on laptop key presses. Revert only on true release (long quiet gap):
-        // firing mid-hold makes monitor.sys re-read the reverted value and step
-        // from there, so panel and revert fight for the whole hold.
-        _wmiRevertTimer = _dispatcherQueue.CreateTimer();
-        _wmiRevertTimer.IsRepeating = false;
-        _wmiRevertTimer.Interval = TimeSpan.FromMilliseconds(800);
-        _wmiRevertTimer.Tick += (_, _) =>
-        {
-            var wmiDisplay = Displays.Displays.FirstOrDefault(d => d.Controller is WmiDisplayController);
-            if (wmiDisplay is null || (_lastWmiEventValue ?? wmiDisplay.Brightness) == wmiDisplay.Brightness)
-            {
-                return;
-            }
-
-            var baseline = wmiDisplay.Brightness;
-            Log.Write($"Reverting Windows-made change on excluded panel -> {baseline}%");
-            _wmiRevertingTo = baseline;
-            _lastWmiEventValue = baseline;
-            wmiDisplay.Controller.SetBrightness(baseline);
-        };
     }
 
     // WM_DISPLAYCHANGE / monitor device-interface arrival arrive via the tray
@@ -244,19 +221,18 @@ internal sealed class BrightnessController : IDisposable
                 return;
             }
 
-            // A revert write makes the vendor driver ramp smoothly back to the
-            // pinned value, firing an event per intermediate step. Swallow those
-            // until the ramp completes - they are not key presses.
             if (_wmiRevertingTo is { } revertingTo)
             {
                 if (Math.Abs(value - revertingTo) <= 1)
                 {
+                    // Feedback echo of our own revert write: swallow it.
                     _wmiRevertingTo = null;
                     _lastWmiEventValue = value;
                     wmiDisplay.SetBrightnessSilently(value);
+                    return;
                 }
 
-                return;
+                _wmiRevertingTo = null; // echo lost, or a real change overtook it
             }
 
             if (!wmiDisplay.IsIncluded)
@@ -265,8 +241,10 @@ internal sealed class BrightnessController : IDisposable
                 // handles the ACPI hotkey in kernel mode - there is no user-mode or
                 // registry opt-out). Forward each event's delta to the actual target
                 // display (native steps arrive as +-10, vendor smooth-hold as +-1,
-                // so forward the delta, not a fixed step), and revert the panel once
-                // the burst ends. The panel model stays pinned at the pre-press value.
+                // so forward the delta, not a fixed step) and revert the panel
+                // immediately - per event, which users find far less confusing than
+                // a post-burst rollback. The panel model stays pinned at the
+                // pre-press value.
                 var delta = value - (_lastWmiEventValue ?? value);
                 _lastWmiEventValue = value;
                 if (delta == 0)
@@ -279,8 +257,10 @@ internal sealed class BrightnessController : IDisposable
                     ApplyBrightness(Math.Clamp(target.Brightness + delta, 0, 100));
                 }
 
-                _wmiRevertTimer.Stop();
-                _wmiRevertTimer.Start();
+                var baseline = wmiDisplay.Brightness;
+                Log.Write($"Reverting Windows-made change on excluded panel -> {baseline}%");
+                _wmiRevertingTo = baseline;
+                wmiDisplay.Controller.SetBrightness(baseline);
                 return;
             }
 
@@ -375,7 +355,6 @@ internal sealed class BrightnessController : IDisposable
         _restoreTimer.Stop();
         _hotplugTimer.Stop();
         _pollTimer.Stop();
-        _wmiRevertTimer.Stop();
 
         _wmiWatcher.Dispose();
         _hook.Dispose();

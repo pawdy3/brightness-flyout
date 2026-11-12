@@ -17,6 +17,11 @@ internal sealed class WmiDisplayController : IDisplayController
 
     private readonly string _instanceName;
 
+    private readonly object _writeGate = new();
+    private bool _writerRunning;
+    private int _pendingValue = -1;
+    private int _lastWrittenValue = -1;
+
     public WmiDisplayController(string instanceName)
     {
         _instanceName = instanceName;
@@ -90,37 +95,73 @@ internal sealed class WmiDisplayController : IDisplayController
         percent = Math.Clamp(percent, 0, 100);
         CurrentBrightness = percent;
 
-        Task.Run(() =>
+        // Coalesce: immediate per-event reverts during a key hold would otherwise
+        // queue dozens of identical WMI writes.
+        lock (_writeGate)
         {
-            try
+            _pendingValue = percent;
+            if (_writerRunning)
             {
-                using var connection = new WmiConnection(RootWmi);
-                var methods = connection.CreateQuery(
-                        $"SELECT * FROM WmiMonitorBrightnessMethods WHERE InstanceName = '{EscapeWmi(_instanceName)}'")
-                    .FirstOrDefault();
-                if (methods is null)
+                return;
+            }
+
+            _writerRunning = true;
+        }
+
+        Task.Run(WriterLoop);
+    }
+
+    private void WriterLoop()
+    {
+        while (true)
+        {
+            int value;
+            lock (_writeGate)
+            {
+                if (_pendingValue == _lastWrittenValue)
                 {
-                    IsAvailable = false;
+                    _writerRunning = false;
                     return;
                 }
 
-                // WmiSetBrightness(timeoutSeconds, brightnessPercent)
-                // NOTE: WBEM's in-params Put rejects VT_UI4 for the CIM uint32
-                // Timeout (WBEM_E_TYPE_MISMATCH) - it must go in as VT_I4 (int).
-                // Brightness is CIM uint8, which accepts VT_UI1 (byte).
-                using var method = methods.GetMethod("WmiSetBrightness");
-                using var parameters = method.CreateInParameters();
-                parameters.SetPropertyValue("Timeout", 1);
-                parameters.SetPropertyValue("Brightness", (byte)percent);
-                methods.ExecuteMethod<uint>(method, parameters, out _);
-                IsAvailable = true;
+                value = _pendingValue;
             }
-            catch (Exception ex)
+
+            WriteCore(value);
+            _lastWrittenValue = value;
+        }
+    }
+
+    private void WriteCore(int percent)
+    {
+        try
+        {
+            using var connection = new WmiConnection(RootWmi);
+            var methods = connection.CreateQuery(
+                    $"SELECT * FROM WmiMonitorBrightnessMethods WHERE InstanceName = '{EscapeWmi(_instanceName)}'")
+                .FirstOrDefault();
+            if (methods is null)
             {
                 IsAvailable = false;
-                Log.Write($"WMI brightness write failed ({_instanceName})", ex);
+                return;
             }
-        });
+
+            // WmiSetBrightness(timeoutSeconds, brightnessPercent)
+            // NOTE: WBEM's in-params Put rejects VT_UI4 for the CIM uint32
+            // Timeout (WBEM_E_TYPE_MISMATCH) - it must go in as VT_I4 (int).
+            // Brightness is CIM uint8, which accepts VT_UI1 (byte).
+            using var method = methods.GetMethod("WmiSetBrightness");
+            using var parameters = method.CreateInParameters();
+            parameters.SetPropertyValue("Timeout", 1);
+            parameters.SetPropertyValue("Brightness", (byte)percent);
+            methods.ExecuteMethod<uint>(method, parameters, out _);
+            IsAvailable = true;
+        }
+        catch (Exception ex)
+        {
+            IsAvailable = false;
+            Log.Write($"WMI brightness write failed ({_instanceName})", ex);
+        }
     }
 
     /// <summary>Diagnostic hook (BRIGHTFLYOUT_WMI_SELFTEST, or the Settings button):
