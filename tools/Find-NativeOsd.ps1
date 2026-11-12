@@ -56,5 +56,7 @@ $cb = [OsdFinder+EnumProc]{
 [OsdFinder]::EnumWindows($cb, [IntPtr]::Zero) | Out-Null
 
 $rows |
-    Sort-Object { $_.Class -in 'Progman', 'WorkerW', 'Shell_TrayWnd', 'Shell_SecondaryTrayWnd' } |
-    Format-Table -AutoSize | Out-String -Width 200 | Write-Host
+    Where-Object { $_.Rect -notmatch '^(\d+),(\d+)-\1,\2$' } |
+    Sort-Object Process, Class |
+    ForEach-Object { "{0}  [{1}]  {2}  ""{3}""  {4}" -f $_.Hwnd, $_.Process, $_.Class, $_.Title, $_.Rect } |
+    Out-String -Width 300 | Write-Host
