@@ -22,10 +22,16 @@
          framework resolves the host culture when a window is first shown and
          throws CultureNotFoundException under invariant mode. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
-    <!-- Trimming disables built-in COM interop, but System.Management (WMI) is
-         built on it. Re-enable so the internal-panel path works in trimmed builds.
-         (NativeAOT cannot support built-in COM at all - WMI stays AOT-excluded.) -->
+  </PropertyGroup>
+
+  <!-- WMI (internal laptop panels) via System.Management: unavailable under
+       NativeAOT, which cannot do the built-in COM interop System.Management is
+       built on (the compiler keeps it out of the AOT graph entirely - the WMI
+       classes compile to stubs, see WmiDisplayController.cs). For trimmed JIT
+       builds, trimming would also disable built-in COM, so re-enable it there. -->
+  <PropertyGroup Condition="'$(PublishAot)' != 'true'">
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <DefineConstants>$(DefineConstants);BRIGHTFLYOUT_WMI</DefineConstants>
   </PropertyGroup>
 
   <!-- MSIX packaging: framework-dependent Windows App SDK (the Microsoft.WindowsAppRuntime.2
@@ -42,21 +48,28 @@
   </PropertyGroup>
 
   <!-- Packaged apps resolve WASDK via the framework package, so the bootstrapper
-       and background-task host DLLs are dead weight inside the MSIX. -->
+       and background-task host DLLs are dead weight inside the MSIX. PDBs are
+       excluded too: symbols are not shipped (their presence in the payload also
+       triggers an mspdbcmf.exe warning without the VC++ build tools installed). -->
   <Target Name="RemovePackagedOnlyDeadWeight" BeforeTargets="_ComputeAppxPackagePayload" Condition="'$(BuildMSIX)' == 'true'">
     <ItemGroup>
       <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.FileName)' == 'Microsoft.WindowsAppRuntime.Bootstrap'" />
       <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.FileName)' == 'Microsoft.Windows.ApplicationModel.Background.UniversalBGTask'" />
       <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Name)' == 'BrightFlyout.deps.json' and '$(PublishAot)' == 'true'" />
       <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Name)' == 'BrightFlyout.runtimeconfig.json' and '$(PublishAot)' == 'true'" />
+      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Extension)' == '.pdb'" />
     </ItemGroup>
   </Target>
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\app.ico" LogicalName="BrightFlyout.app.ico" />
-    <!-- System.Management's static initializers use reflection-based delegate
-         loading that trimming breaks (REGDB/TypeInitializationException at
-         runtime). Root the assembly whole so the WMI path survives trimming. -->
+  </ItemGroup>
+
+  <!-- System.Management's static initializers use reflection-based delegate
+       loading that trimming breaks (REGDB/TypeInitializationException at
+       runtime). Root the assembly whole so the WMI path survives trimming.
+       (JIT builds only - AOT excludes System.Management entirely.) -->
+  <ItemGroup Condition="'$(PublishAot)' != 'true'">
     <TrimmerRootAssembly Include="System.Management" />
     <TrimmerRootDescriptor Include="TrimmerRoots.xml" />
   </ItemGroup>
@@ -67,7 +80,7 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.9457" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
-    <PackageReference Include="System.Management" Version="9.0.23" />
+    <PackageReference Include="System.Management" Version="9.0.23" Condition="'$(PublishAot)' != 'true'" />
     <!-- Transitive Windows AI/ML payloads (onnxruntime, DirectML, AI winmds) are
          unused by this app; excluding them saves ~40 MB per package. -->
     <PackageReference Include="Microsoft.WindowsAppSDK.AI" Version="2.6.5" ExcludeAssets="all" />

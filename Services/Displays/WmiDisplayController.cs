@@ -1,3 +1,4 @@
+#if BRIGHTFLYOUT_WMI
 using System.Management;
 
 namespace BrightFlyout.Services.Displays;
@@ -97,3 +98,29 @@ internal sealed class WmiDisplayController : IDisplayController
 
     private static string EscapeWql(string value) => value.Replace("\\", "\\\\").Replace("'", "\\'");
 }
+#else
+namespace BrightFlyout.Services.Displays;
+
+/// <summary>AOT build stub. System.Management requires built-in COM interop, which
+/// NativeAOT does not support - AOT packages report no internal panels.</summary>
+internal sealed class WmiDisplayController : IDisplayController
+{
+    public WmiDisplayController(string instanceName)
+    {
+    }
+
+    public string Id => "wmi|unsupported";
+    public string Name => "Internal display";
+    public string Technology => "WMI (internal panel)";
+    public bool IsAvailable => false;
+    public int? CurrentBrightness => null;
+
+    public static List<string> EnumerateInstanceNames() => [];
+
+    public Task<int?> RefreshBrightnessAsync() => Task.FromResult<int?>(null);
+
+    public void SetBrightness(int percent)
+    {
+    }
+}
+#endif

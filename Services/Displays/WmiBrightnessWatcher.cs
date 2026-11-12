@@ -1,3 +1,4 @@
+#if BRIGHTFLYOUT_WMI
 using System.Management;
 
 namespace BrightFlyout.Services.Displays;
@@ -68,3 +69,22 @@ internal sealed class WmiBrightnessWatcher : IDisposable
         _watcher = null;
     }
 }
+#else
+namespace BrightFlyout.Services.Displays;
+
+/// <summary>AOT build stub: no WMI, so no OS-side brightness events to watch.</summary>
+internal sealed class WmiBrightnessWatcher : IDisposable
+{
+#pragma warning disable CS0067 // event is never raised in the stub
+    public event Action<int>? BrightnessChanged;
+#pragma warning restore CS0067
+
+    public void Start()
+    {
+    }
+
+    public void Dispose()
+    {
+    }
+}
+#endif
