@@ -104,6 +104,11 @@ public partial class SettingsService : ObservableObject
     [JsonPropertyName("showPercentText")]
     public partial bool ShowPercentText { get; set; } = true;
 
+    /// <summary>When on, clicking/dragging the collapsed flyout bar sets brightness.</summary>
+    [ObservableProperty]
+    [JsonPropertyName("clickableFlyoutBar")]
+    public partial bool ClickableFlyoutBar { get; set; } = true;
+
     // --- Multiple displays ---
 
     [ObservableProperty]
@@ -167,6 +172,7 @@ public partial class SettingsService : ObservableObject
                     FillStyle = loaded.FillStyle;
                     CustomFillColor = loaded.CustomFillColor;
                     ShowPercentText = loaded.ShowPercentText;
+                    ClickableFlyoutBar = loaded.ClickableFlyoutBar;
                     MultiMonitorEnabled = loaded.MultiMonitorEnabled;
                     DefaultMonitorId = loaded.DefaultMonitorId;
                     ExcludedMonitorIds = loaded.ExcludedMonitorIds ?? [];

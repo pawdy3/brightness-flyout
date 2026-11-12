@@ -20,10 +20,16 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Collapsed row: target display -->
+                <!-- Collapsed row: target display. Pointer handlers live on the row
+                     so the whole pill is the click target; the expand button marks
+                     its own presses handled and does not reach these. -->
                 <Grid
                     Padding="20,0,8,0"
-                    ColumnSpacing="16">
+                    Background="Transparent"
+                    ColumnSpacing="16"
+                    PointerMoved="OnCollapsedRowPointerMoved"
+                    PointerPressed="OnCollapsedRowPointerPressed"
+                    PointerReleased="OnCollapsedRowPointerReleased">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
@@ -38,7 +44,11 @@
                         FontSize="20"
                         Glyph="&#xE706;" />
 
-                    <Grid Grid.Column="1" Height="4" VerticalAlignment="Center">
+                    <Grid
+                        x:Name="TrackArea"
+                        Grid.Column="1"
+                        Height="4"
+                        VerticalAlignment="Center">
                         <Border
                             x:Name="TrackBar"
                             Background="{ThemeResource ControlFillColorSecondaryBrush}"

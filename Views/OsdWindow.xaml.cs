@@ -281,6 +281,56 @@ public sealed partial class OsdWindow : Window
 
     #endregion
 
+    #region Clickable bar (optional)
+
+    private bool _barDragging;
+
+    private void OnCollapsedRowPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (!_settings.ClickableFlyoutBar)
+        {
+            return;
+        }
+
+        _barDragging = true;
+        ((UIElement)sender).CapturePointer(e.Pointer);
+        SetBarFromPointer(e);
+        e.Handled = true;
+    }
+
+    private void OnCollapsedRowPointerMoved(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        if (_barDragging)
+        {
+            SetBarFromPointer(e);
+        }
+    }
+
+    private void OnCollapsedRowPointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _barDragging = false;
+    }
+
+    private void SetBarFromPointer(Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        var fraction = Math.Clamp(
+            e.GetCurrentPoint(TrackArea).Position.X / TrackArea.ActualWidth, 0, 1);
+        var value = (int)Math.Round(fraction * 100);
+
+        if (_settings.SyncMonitors)
+        {
+            _displays?.SetAllIncluded(value);
+        }
+        else
+        {
+            _displays?.Target?.SetBrightness(value);
+        }
+
+        UpdateValue(value);
+    }
+
+    #endregion
+
     private IntPtr FrameSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, UIntPtr dwRefData)
     {
         if (uMsg == NativeMethods.WM_NCCALCSIZE && wParam != IntPtr.Zero)

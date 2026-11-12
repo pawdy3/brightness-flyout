@@ -195,6 +195,11 @@ internal sealed class KeyboardHookService : IDisposable
             bool up = Contains(usages, usageCount, NativeMethods.HID_USAGE_BRIGHTNESS_INCREMENT);
             bool down = Contains(usages, usageCount, NativeMethods.HID_USAGE_BRIGHTNESS_DECREMENT);
 
+            if (up || down)
+            {
+                Log.Write($"Raw input brightness key: {(up ? "up" : "down")}");
+            }
+
             if (up)
             {
                 OnPress(BrightnessDirection.Up);

@@ -76,9 +76,13 @@ public sealed class DisplayManager
             foreach (var (monitor, deviceName) in physical)
             {
                 var description = monitor.szPhysicalMonitorDescription;
-                bool ddcWorks = Native.NativeMethods.GetVCPFeatureAndVCPFeatureReply(
-                    monitor.hPhysicalMonitor, Native.NativeMethods.VCP_CODE_LUMINANCE,
-                    IntPtr.Zero, out _, out _);
+                // DDC over I2C is flaky (especially via HDMI): retry the probe once.
+                bool ddcWorks = ProbeDdc(monitor.hPhysicalMonitor);
+                if (!ddcWorks)
+                {
+                    Thread.Sleep(150);
+                    ddcWorks = ProbeDdc(monitor.hPhysicalMonitor);
+                }
 
                 if (ddcWorks)
                 {
@@ -104,6 +108,11 @@ public sealed class DisplayManager
         Log.Write($"Enumeration: {controllers.OfType<DdcCiDisplayController>().Count()} DDC/CI + {wmiInstances.Count} WMI display(s)");
         return controllers;
     }
+
+    private static bool ProbeDdc(IntPtr hPhysicalMonitor) =>
+        Native.NativeMethods.GetVCPFeatureAndVCPFeatureReply(
+            hPhysicalMonitor, Native.NativeMethods.VCP_CODE_LUMINANCE,
+            IntPtr.Zero, out _, out _);
 
     private void SyncCollection(List<IDisplayController> controllers)
     {

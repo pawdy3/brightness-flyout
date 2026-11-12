@@ -173,6 +173,7 @@ internal sealed class BrightnessController : IDisposable
     /// (mobile systems consume the HID usages before any hook). Mirror the change.</summary>
     private void OnWmiBrightnessChanged(int value)
     {
+        Log.Write($"WMI brightness event -> {value}%");
         _dispatcherQueue.TryEnqueue(() =>
         {
             var wmiDisplay = Displays.Displays.FirstOrDefault(d => d.Controller is WmiDisplayController);

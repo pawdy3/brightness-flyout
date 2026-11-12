@@ -215,6 +215,13 @@
                             OnContent=""
                             Toggled="OnPercentToggled" />
 
+                        <ToggleSwitch
+                            x:Name="ClickableBarToggle"
+                            Header="Flyout bar responds to clicks"
+                            OffContent=""
+                            OnContent=""
+                            Toggled="OnClickableBarToggled" />
+
                         <Button
                             x:Name="PreviewButton"
                             HorizontalAlignment="Left"

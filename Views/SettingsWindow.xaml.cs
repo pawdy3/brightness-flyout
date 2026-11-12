@@ -68,6 +68,7 @@ public sealed partial class SettingsWindow : Window
         BackgroundColorPicker.Color = ColorHex.ParseOrDefault(_settings.CustomBackgroundColor, Color.FromArgb(0xE6, 0x1F, 0x1F, 0x1F));
         FillColorPicker.Color = ColorHex.ParseOrDefault(_settings.CustomFillColor, Color.FromArgb(0xFF, 0xF5, 0xC5, 0x42));
         PercentToggle.IsOn = _settings.ShowPercentText;
+        ClickableBarToggle.IsOn = _settings.ClickableFlyoutBar;
         MultiMonitorToggle.IsOn = _settings.MultiMonitorEnabled;
         UpdateColorPickerVisibility();
 
@@ -81,8 +82,19 @@ public sealed partial class SettingsWindow : Window
 
     // NativeAOT: rows are UserControls added to Items in code; the combo holds
     // display names with a parallel id list. No managed collections cross the ABI.
+    // Rebuilt only on membership changes - value changes (brightness steps) arrive
+    // via the same event, and recreating rows would visibly flash the checkboxes.
+    private string _rowsFingerprint = string.Empty;
+
     private void RebuildDisplayList()
     {
+        var fingerprint = string.Join("|", _app.Controller.Displays.Displays.Select(d => d.Id));
+        if (fingerprint == _rowsFingerprint)
+        {
+            return;
+        }
+
+        _rowsFingerprint = fingerprint;
         DisplayStatusItems.Items.Clear();
         _defaultMonitorIds.Clear();
         DefaultMonitorComboBox.Items.Clear();
@@ -290,6 +302,14 @@ public sealed partial class SettingsWindow : Window
         if (!_initializing)
         {
             _settings.ShowPercentText = PercentToggle.IsOn;
+        }
+    }
+
+    private void OnClickableBarToggled(object sender, RoutedEventArgs e)
+    {
+        if (!_initializing)
+        {
+            _settings.ClickableFlyoutBar = ClickableBarToggle.IsOn;
         }
     }
 
