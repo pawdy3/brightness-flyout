@@ -51,9 +51,11 @@ jobs:
       #
       # Artifact 1: AOT MSIX - NativeAOT exe only (~5 MB). Full feature set:
       # WMI (internal laptop panels) works via WmiLight, which is AOT-compatible.
+      # NOTE: no --no-restore - the ILCompiler toolchain is only pulled in when
+      # PublishAot=true is set during restore, so let publish restore itself.
       - name: Publish MSIX (AOT)
         run: >-
-          dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-restore
+          dotnet publish -c Release -p:Platform=x64 -r win-x64
           -p:BuildMSIX=true -p:PublishAot=true -p:EnableMsixTooling=true
           -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
           -p:PackageCertificateKeyFile=cert.pfx
@@ -71,7 +73,7 @@ jobs:
       # Fallback variant; the AOT build has full feature parity.
       - name: Publish MSIX (hybrid)
         run: >-
-          dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-restore
+          dotnet publish -c Release -p:Platform=x64 -r win-x64
           -p:BuildMSIX=true -p:PublishAot=false -p:SelfContained=true
           -p:PublishTrimmed=true -p:EnableMsixTooling=true
           -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
