@@ -86,7 +86,7 @@ public sealed class DisplayManager
                 {
                     // Neither transport works: phantom/stale monitor entry (common on
                     // laptops, e.g. duplicate "Generic PnP Monitor"). Don't list it.
-                    App.Log($"Skipping unresponsive display '{description}' ({deviceName})");
+                    Log.Write($"Skipping unresponsive display '{description}' ({deviceName})");
                 }
             }
         }

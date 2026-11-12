@@ -81,7 +81,7 @@ public sealed class OsdManager
         catch (Exception ex)
         {
             // DisplayArea can fail on Windows 10; fall back to the primary work area.
-            App.Log("DisplayArea unavailable, using primary work area fallback", ex);
+            Log.Write("DisplayArea unavailable, using primary work area fallback", ex);
             areas = [GetPrimaryWorkArea()];
             all = false;
         }

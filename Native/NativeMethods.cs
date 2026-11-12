@@ -221,6 +221,148 @@ internal static class NativeMethods
 
     #endregion
 
+    #region tray / message window / menus
+
+    public const int WM_USER = 0x0400;
+    public const int WM_NULL = 0x0000;
+    public const int WM_LBUTTONDBLCLK = 0x0203;
+    public const int WM_LBUTTONUP = 0x0202;
+    public const int WM_RBUTTONUP = 0x0205;
+    public const int WM_CONTEXTMENU = 0x007B;
+    public const int WM_COMMAND = 0x0111;
+    public const int WM_DESTROY = 0x0002;
+
+    public const int NIM_ADD = 0x0;
+    public const int NIM_MODIFY = 0x1;
+    public const int NIM_DELETE = 0x2;
+    public const int NIM_SETVERSION = 0x4;
+
+    public const int NIF_MESSAGE = 0x1;
+    public const int NIF_ICON = 0x2;
+    public const int NIF_TIP = 0x4;
+    public const int NIF_INFO = 0x10;
+    public const int NIF_GUID = 0x20;
+
+    public const int NIIF_INFO = 0x1;
+
+    public const uint MF_STRING = 0x0;
+    public const uint MF_SEPARATOR = 0x800;
+    public const uint TPM_RETURNCMD = 0x100;
+    public const uint TPM_NONOTIFY = 0x80;
+    public const uint TPM_RIGHTBUTTON = 0x2;
+
+    public const int SM_CXSMICON = 49;
+    public const int SM_CYSMICON = 50;
+
+    public static readonly IntPtr HWND_MESSAGE = new(-3);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct WNDCLASSEXW
+    {
+        public int cbSize;
+        public int style;
+        public IntPtr lpfnWndProc;
+        public int cbClsExtra;
+        public int cbWndExtra;
+        public IntPtr hInstance;
+        public IntPtr hIcon;
+        public IntPtr hCursor;
+        public IntPtr hbrBackground;
+        public string? lpszMenuName;
+        public string lpszClassName;
+        public IntPtr hIconSm;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct NOTIFYICONDATAW
+    {
+        public int cbSize;
+        public IntPtr hWnd;
+        public int uID;
+        public int uFlags;
+        public int uCallbackMessage;
+        public IntPtr hIcon;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string szTip;
+        public int dwState;
+        public int dwStateMask;
+        public int uVersion;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string szInfo;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)]
+        public string szInfoTitle;
+        public int dwInfoFlags;
+        public Guid guidItem;
+        public IntPtr hBalloonIcon;
+    }
+
+    public delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern ushort RegisterClassExW(ref WNDCLASSEXW lpwcx);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr CreateWindowExW(int dwExStyle, string lpClassName, string? lpWindowName,
+        long dwStyle, int x, int y, int nWidth, int nHeight, IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr DefWindowProcW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DestroyWindow(IntPtr hWnd);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool Shell_NotifyIconW(int dwMessage, ref NOTIFYICONDATAW lpData);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr CreatePopupMenu();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool AppendMenuW(IntPtr hMenu, uint uFlags, UIntPtr uIDNewItem, string? lpNewItem);
+
+    [DllImport("user32.dll")]
+    public static extern int TrackPopupMenu(IntPtr hMenu, uint uFlags, int x, int y, int nReserved, IntPtr hWnd, IntPtr prcRect);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostMessageW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetCursorPos(out POINT lpPoint);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern uint RegisterWindowMessageW(string lpString);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DestroyIcon(IntPtr hIcon);
+
+    [DllImport("user32.dll")]
+    public static extern int GetSystemMetrics(int nIndex);
+
+    public const int IMAGE_ICON = 1;
+    public const uint LR_LOADFROMFILE = 0x0010;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr LoadImageW(IntPtr hInst, string name, int type, int cx, int cy, uint fuLoad);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X;
+        public int Y;
+    }
+
+    #endregion
+
     #region dxva2 (Monitor Configuration API / DDC-CI)
 
     [DllImport("dxva2.dll", SetLastError = true)]

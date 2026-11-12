@@ -135,6 +135,11 @@ public partial class SettingsService : ObservableObject
     [property: JsonPropertyName("osdPlacement")]
     private OsdPlacement _osdPlacement = OsdPlacement.Primary;
 
+    /// <summary>Last version an update notification was shown for (never nag twice).</summary>
+    [ObservableProperty]
+    [property: JsonPropertyName("lastNotifiedVersion")]
+    private string _lastNotifiedVersion = string.Empty;
+
     partial void OnBrightnessStepChanged(int value) => BrightnessStep = Math.Clamp(value, 1, 50);
     partial void OnOsdDurationMsChanged(int value) => OsdDurationMs = Math.Clamp(value, 500, 10000);
 
@@ -173,6 +178,7 @@ public partial class SettingsService : ObservableObject
                     ExcludedMonitorIds = loaded.ExcludedMonitorIds ?? [];
                     SyncMonitors = loaded.SyncMonitors;
                     OsdPlacement = loaded.OsdPlacement;
+                    LastNotifiedVersion = loaded.LastNotifiedVersion;
                 }
             }
         }

@@ -33,7 +33,7 @@ internal sealed class WmiBrightnessWatcher : IDisposable
         }
         catch (Exception ex)
         {
-            App.Log("WMI brightness watcher unavailable", ex);
+            Log.Write("WMI brightness watcher unavailable", ex);
             _watcher?.Dispose();
             _watcher = null;
         }

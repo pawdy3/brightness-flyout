@@ -54,7 +54,7 @@ internal static class NativeOsdSuppressor
         if (_legacyOsdElements.Count == 0 && !_loggedLegacySearch)
         {
             _loggedLegacySearch = true;
-            App.Log("Legacy OSD host (NativeHWNDHost/DirectUIHWND) not found");
+            Log.Write("Legacy OSD host (NativeHWNDHost/DirectUIHWND) not found");
         }
     }
 
