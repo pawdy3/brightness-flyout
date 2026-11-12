@@ -45,11 +45,33 @@ jobs:
           $m = $m -replace '(<Identity[^>]*Version=")[\d.]+(")', "`${1}$v.0`${2}"
           [IO.File]::WriteAllText("Package.appxmanifest", $m, [Text.UTF8Encoding]::new($true))
 
-      # Both variants pull the Windows App SDK automatically as the
+      # All variants pull the Windows App SDK automatically as the
       # Microsoft.WindowsAppRuntime.2 framework package from the Store at install
       # (PackageDependency is injected by the build).
       #
-      # Artifact 1: AOT MSIX - NativeAOT exe only (~5 MB). Full feature set:
+      # Artifact 1: framework-dependent MSIX (~10 MB) - needs the .NET 10 Desktop
+      # Runtime on the machine (the apphost shows a proper dialog with a download
+      # link when missing; same for MSIX, the host runs before the CLR). The WASDK
+      # managed projections must ship in the package (framework packages share
+      # native code only), so FD barely beats the hybrid on size.
+      - name: Publish MSIX (framework-dependent)
+        run: >-
+          dotnet publish -c Release -p:Platform=x64 -r win-x64
+          -p:BuildMSIX=true -p:PublishAot=false -p:SelfContained=false
+          -p:EnableMsixTooling=true
+          -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
+          -p:PackageCertificateKeyFile=cert.pfx
+          -p:AppxPackageDir=out\fd\
+
+      # The variants must not share intermediate state: switching PublishAot
+      # on the same obj/bin corrupts the next package. Full reset.
+      - name: Clean intermediates (FD -> AOT)
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force bin, obj -ErrorAction SilentlyContinue
+          dotnet restore -p:Platform=x64 -r win-x64
+
+      # Artifact 2: AOT MSIX - NativeAOT exe only (~5 MB). Full feature set:
       # WMI (internal laptop panels) works via WmiLight, which is AOT-compatible.
       # NOTE: no --no-restore - the ILCompiler toolchain is only pulled in when
       # PublishAot=true is set during restore, so let publish restore itself.
@@ -61,15 +83,15 @@ jobs:
           -p:PackageCertificateKeyFile=cert.pfx
           -p:AppxPackageDir=out\aot\
 
-      # The two variants must not share intermediate state: switching PublishAot
-      # on the same obj/bin corrupts the second package. Full reset.
+      # The variants must not share intermediate state: switching PublishAot
+      # on the same obj/bin corrupts the next package. Full reset.
       - name: Clean intermediates between variants
         shell: pwsh
         run: |
           Remove-Item -Recurse -Force bin, obj -ErrorAction SilentlyContinue
           dotnet restore -p:Platform=x64 -r win-x64
 
-      # Artifact 2: hybrid MSIX - trimmed .NET 10 runtime inside (~10 MB).
+      # Artifact 3: hybrid MSIX - trimmed .NET 10 runtime inside (~11 MB).
       # Fallback variant; the AOT build has full feature parity.
       - name: Publish MSIX (hybrid)
         run: >-
@@ -84,7 +106,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force staging | Out-Null
-          Copy-Item (Get-Item out/aot/**/*_x64.msix).FullName staging/BrightFlyout_AOT_x64.msix
+          Copy-Item (Get-Item out/fd/**/*_x64.msix).FullName staging/BrightFlyout_FrameworkDependent_x64.msix
+          Copy-Item (Get-Item out/aot/**/*_x64.msix).FullName staging/BrightFlyout_AOT-experimental_x64.msix
           Copy-Item (Get-Item out/hybrid/**/*_x64.msix).FullName staging/BrightFlyout_Hybrid_x64.msix
           Copy-Item BrightFlyout.cer staging/
           Copy-Item tools/Install-BrightFlyout.ps1 staging/
@@ -103,7 +126,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           gh release create ${{ github.ref_name }}
-          staging/BrightFlyout_AOT_x64.msix staging/BrightFlyout_Hybrid_x64.msix
+          staging/BrightFlyout_FrameworkDependent_x64.msix
+          staging/BrightFlyout_AOT-experimental_x64.msix
+          staging/BrightFlyout_Hybrid_x64.msix
           staging/BrightFlyout.cer staging/Install-BrightFlyout.ps1
           --title "BrightFlyout ${{ github.ref_name }}"
           --generate-notes

@@ -114,19 +114,21 @@ produced corrupted packages.
 
 ## Distribution
 
-CI (`.github/workflows/build.yml`) produces two MSIX packages on every push,
+CI (`.github/workflows/build.yml`) produces three MSIX packages on every push,
 and attaches them to a GitHub Release when a `v*` tag is pushed:
 
 | Artifact | Size | Contains |
 |---|---|---|
-| `BrightFlyout_AOT_x64.msix` | ~5 MB | NativeAOT exe only — full feature set, including internal laptop panels (WMI via WmiLight, which is AOT-compatible) |
-| `BrightFlyout_Hybrid_x64.msix` | ~10 MB | regular build + trimmed .NET 10 runtime (fallback variant) |
+| `BrightFlyout_FrameworkDependent_x64.msix` | ~10 MB | regular build; needs the .NET 10 Desktop Runtime installed (a missing runtime shows the standard .NET apphost dialog with a download link) |
+| `BrightFlyout_AOT-experimental_x64.msix` | ~5 MB | NativeAOT exe, nothing required — full feature set, including internal laptop panels (WMI via WmiLight, which is AOT-compatible). AOT-compiled, experimental |
+| `BrightFlyout_Hybrid_x64.msix` | ~11 MB | regular build + trimmed .NET 10 runtime (fallback variant) |
 
-Both pull the Windows App SDK 2.6 automatically as a framework package from the
+All pull the Windows App SDK 2.6 automatically as a framework package from the
 Microsoft Store during install (one-time, needs network + Store access), and
-both are proper installers: Start Menu entry, Settings > Apps uninstall, and
+all are proper installers: Start Menu entry, Settings > Apps uninstall, and
 in-place upgrades (installing a newer `.msix` upgrades the app and keeps
-settings). Pick AOT; the hybrid variant exists as a fallback.
+settings). Pick the framework-dependent build for the most conventional
+runtime behavior, or AOT for the smallest fully self-contained package.
 
 ### Installing / upgrading
 

@@ -89,6 +89,10 @@ public partial class App : Application
         Controller.BrightnessChanged += OnBrightnessChanged;
         Osd.BindDisplays(Controller.Displays);
         Controller.Start(_tray);
+        if (_tray is not null)
+        {
+            _tray.RefreshRequested += () => _ = Controller.RefreshDisplaysAsync();
+        }
 
         // Diagnostics: prove the WMI path works (usable on machines without
         // an internal panel too).

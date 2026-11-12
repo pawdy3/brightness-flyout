@@ -36,6 +36,11 @@
             SelectionChanged="OnNavSelectionChanged">
 
             <NavigationView.MenuItems>
+                <NavigationViewItem Content="General" Tag="General">
+                    <NavigationViewItem.Icon>
+                        <FontIcon FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Displays" Tag="Displays">
                     <NavigationViewItem.Icon>
                         <FontIcon FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Glyph="&#xE7F4;" />
@@ -49,11 +54,6 @@
                 <NavigationViewItem Content="Keyboard" Tag="Keyboard">
                     <NavigationViewItem.Icon>
                         <FontIcon FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Glyph="&#xE765;" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-                <NavigationViewItem Content="General" Tag="General">
-                    <NavigationViewItem.Icon>
-                        <FontIcon FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Glyph="&#xE713;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
@@ -106,19 +106,6 @@
                             Text="No controllable displays found."
                             Visibility="Collapsed" />
 
-                        <controls:SettingsCard
-                            Header="WMI diagnostics"
-                            Description="Checks internal-panel (WMI) connectivity; result is written to the log file.">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Click="OnWmiSelfTestClick" Content="Run self-test" />
-                                <TextBlock
-                                    x:Name="WmiSelfTestResult"
-                                    MaxWidth="360"
-                                    VerticalAlignment="Center"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    TextWrapping="Wrap" />
-                            </StackPanel>
-                        </controls:SettingsCard>
 
                         <controls:SettingsCard
                             Margin="0,8,0,0"
@@ -341,6 +328,20 @@
                                 OffContent=""
                                 OnContent=""
                                 Toggled="OnStartupToggled" />
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard
+                            Header="WMI diagnostics"
+                            Description="Checks internal-panel (WMI) connectivity; result is written to the log file.">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Click="OnWmiSelfTestClick" Content="Run self-test" />
+                                <TextBlock
+                                    x:Name="WmiSelfTestResult"
+                                    MaxWidth="360"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
                         </controls:SettingsCard>
                     </StackPanel>
 

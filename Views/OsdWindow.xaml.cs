@@ -130,7 +130,7 @@ public sealed partial class OsdWindow : Window
     public void BindDisplays(DisplayManager displays)
     {
         _displays = displays;
-        SyncToggle.IsOn = _settings.SyncMonitors;
+        SyncToggleState();
         RebuildDisplayRows();
         UpdateExpandButtonVisibility();
     }
@@ -251,8 +251,17 @@ public sealed partial class OsdWindow : Window
         }
     }
 
+    // ToggleSwitch.Toggled also fires for programmatic IsOn changes - guard the
+    // initial assignments, otherwise every window (re)creation writes brightness.
+    private bool _syncToggleInitializing;
+
     private void OnSyncToggled(object sender, RoutedEventArgs e)
     {
+        if (_syncToggleInitializing)
+        {
+            return;
+        }
+
         var on = SyncToggle.IsOn;
         if (_settings.SyncMonitors != on)
         {
@@ -269,7 +278,9 @@ public sealed partial class OsdWindow : Window
     /// <summary>Keeps the sync toggle in sync when changed from elsewhere.</summary>
     public void SyncToggleState()
     {
+        _syncToggleInitializing = true;
         SyncToggle.IsOn = _settings.SyncMonitors;
+        _syncToggleInitializing = false;
         UpdateRowSliderStates();
     }
 

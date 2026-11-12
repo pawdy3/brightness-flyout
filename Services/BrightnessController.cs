@@ -269,10 +269,20 @@ internal sealed class BrightnessController : IDisposable
                 return; // feedback from our own write, or nothing to do
             }
 
+            var previousValue = _lastWmiEventValue ?? wmiDisplay.Brightness;
             wmiDisplay.SetBrightnessSilently(value);
             _lastWmiEventValue = value;
             // Implicit target: applies only while no configured default is available.
             Displays.SetAutomaticTarget(wmiDisplay.Id);
+
+            var currentTarget = Displays.Target;
+            if (currentTarget is not null && currentTarget != wmiDisplay && !_settings.SyncMonitors)
+            {
+                // The internal panel is included (allowed to change), but the
+                // keyboard targets another display: mirror the delta there too.
+                ApplyBrightness(Math.Clamp(currentTarget.Brightness + (value - previousValue), 0, 100));
+                return;
+            }
 
             if (_settings.SyncMonitors)
             {

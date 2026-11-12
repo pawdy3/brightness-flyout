@@ -59,6 +59,11 @@
       <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Name)' == 'BrightFlyout.deps.json' and '$(PublishAot)' == 'true'" />
       <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Name)' == 'BrightFlyout.runtimeconfig.json' and '$(PublishAot)' == 'true'" />
       <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Extension)' == '.pdb'" />
+      <!-- NOTE: the WASDK *managed* projection assemblies (Microsoft.WinUI.dll,
+           Microsoft.Windows.SDK.NET.dll, ...) must ship in the package even for
+           framework-dependent builds - MSIX framework packages only share native
+           code; the CLR never probes them for managed assemblies. Removing them
+           crashes the app at startup (verified). -->
     </ItemGroup>
   </Target>
 

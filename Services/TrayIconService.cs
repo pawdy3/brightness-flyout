@@ -22,6 +22,7 @@ internal sealed unsafe class TrayIconService : IDisposable
 
     private const int CmdSettings = 1;
     private const int CmdExit = 2;
+    private const int CmdRefresh = 3;
 
     // One instance per process; the (unmanaged) WndProc cannot capture state.
     private static TrayIconService? _instance;
@@ -41,6 +42,7 @@ internal sealed unsafe class TrayIconService : IDisposable
     internal HWND Hwnd => _hwnd;
 
     public event Action? SettingsRequested;
+    public event Action? RefreshRequested;
     public event Action? ExitRequested;
 
     /// <summary>Raised on the UI thread for WM_INPUT delivered to the tray window.</summary>
@@ -323,6 +325,7 @@ internal sealed unsafe class TrayIconService : IDisposable
         }
 
         AppendMenuText(menu, MENU_ITEM_FLAGS.MF_STRING, CmdSettings, "Settings");
+        AppendMenuText(menu, MENU_ITEM_FLAGS.MF_STRING, CmdRefresh, "Refresh displays");
         AppendMenuText(menu, MENU_ITEM_FLAGS.MF_SEPARATOR, 0, null);
         AppendMenuText(menu, MENU_ITEM_FLAGS.MF_STRING, CmdExit, "Exit");
 
@@ -352,6 +355,9 @@ internal sealed unsafe class TrayIconService : IDisposable
         {
             case CmdSettings:
                 SettingsRequested?.Invoke();
+                break;
+            case CmdRefresh:
+                RefreshRequested?.Invoke();
                 break;
             case CmdExit:
                 ExitRequested?.Invoke();

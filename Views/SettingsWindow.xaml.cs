@@ -45,7 +45,9 @@ public sealed partial class SettingsWindow : Window
         _appWindow = AppWindow.GetFromWindowId(windowId);
         _appWindow.Resize(new Windows.Graphics.SizeInt32(820, 780));
 
-        Nav.SelectedItem = Nav.MenuItems[0];
+        // General is listed first, but the window opens on Displays.
+        Nav.SelectedItem = Nav.MenuItems.OfType<NavigationViewItem>()
+            .FirstOrDefault(i => i.Tag as string == "Displays") ?? Nav.MenuItems[0];
 
         LoadFromSettings();
         RebuildDisplayList();
