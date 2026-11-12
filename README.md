@@ -74,6 +74,10 @@ dotnet publish -c Release -p:Platform=x64 -r win-x64 --self-contained `
 # -> bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\publish\BrightFlyout.exe
 ```
 
+> **Note:** close any running BrightFlyout instance before publishing - the
+> bundler cannot overwrite a running exe and fails with a cryptic
+> `GenerateBundle` / "forbidden to change Manifest state" error.
+
 ## Notes
 
 - Only the **primary** display is controlled (single-display scope by design).
