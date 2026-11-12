@@ -87,12 +87,12 @@ internal sealed class BrightnessController : IDisposable
         _pollTimer.Tick += (_, _) => _ = RefreshDisplaysAsync();
 
         // When the internal panel is excluded from control, Windows still changes
-        // it on laptop key presses. The vendor driver ramps smoothly and fires an
-        // event per intermediate step, so reverting immediately per event fights
-        // the ramp. Revert once, after the press burst ends.
+        // it on laptop key presses. Revert only on true release (long quiet gap):
+        // firing mid-hold makes monitor.sys re-read the reverted value and step
+        // from there, so panel and revert fight for the whole hold.
         _wmiRevertTimer = _dispatcherQueue.CreateTimer();
         _wmiRevertTimer.IsRepeating = false;
-        _wmiRevertTimer.Interval = TimeSpan.FromMilliseconds(400);
+        _wmiRevertTimer.Interval = TimeSpan.FromMilliseconds(800);
         _wmiRevertTimer.Tick += (_, _) =>
         {
             var wmiDisplay = Displays.Displays.FirstOrDefault(d => d.Controller is WmiDisplayController);

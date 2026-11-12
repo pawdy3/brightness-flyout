@@ -113,8 +113,10 @@
                                 <Button Click="OnWmiSelfTestClick" Content="Run self-test" />
                                 <TextBlock
                                     x:Name="WmiSelfTestResult"
+                                    MaxWidth="360"
                                     VerticalAlignment="Center"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap" />
                             </StackPanel>
                         </controls:SettingsCard>
 

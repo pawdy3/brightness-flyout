@@ -124,9 +124,9 @@ public sealed class DisplayManager
             foreach (var (monitor, deviceName) in physical)
             {
                 var description = monitor.szPhysicalMonitorDescription.ToString();
-                // DDC over I2C is flaky (especially via HDMI): retry the probe once.
+                // DDC over I2C is flaky (especially via HDMI): retry the probe twice.
                 bool ddcWorks = ProbeDdc(monitor.hPhysicalMonitor);
-                if (!ddcWorks)
+                for (var retry = 0; retry < 2 && !ddcWorks; retry++)
                 {
                     Thread.Sleep(150);
                     ddcWorks = ProbeDdc(monitor.hPhysicalMonitor);
@@ -173,13 +173,32 @@ public sealed class DisplayManager
             null, &current, &maximum) != 0;
     }
 
+    // I2C probes flake under load (e.g. while a DDC write is in flight); a display
+    // is dropped only after this many consecutive enumeration misses.
+    private const int MissesBeforeRemoval = 3;
+    private readonly Dictionary<string, int> _enumerationMisses = [];
+
     private void SyncCollection(List<IDisplayController> controllers)
     {
         for (int i = Displays.Count - 1; i >= 0; i--)
         {
-            if (controllers.All(c => c.Id != Displays[i].Id))
+            var display = Displays[i];
+            if (controllers.Any(c => c.Id == display.Id))
             {
+                _enumerationMisses.Remove(display.Id);
+                continue;
+            }
+
+            var misses = _enumerationMisses.TryGetValue(display.Id, out var m) ? m + 1 : 1;
+            if (misses >= MissesBeforeRemoval)
+            {
+                _enumerationMisses.Remove(display.Id);
+                Log.Write($"Display lost after {misses} failed enumerations: {display.Name}");
                 Displays.RemoveAt(i);
+            }
+            else
+            {
+                _enumerationMisses[display.Id] = misses;
             }
         }
 
