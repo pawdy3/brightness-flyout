@@ -37,10 +37,8 @@ public sealed partial class SettingsWindow : Window
         _appWindow = AppWindow.GetFromWindowId(windowId);
         _appWindow.Resize(new Windows.Graphics.SizeInt32(620, 900));
 
-        DisplayStatusItems.ItemsSource = _app.Controller.Displays.Displays;
-        DefaultMonitorComboBox.ItemsSource = _app.Controller.Displays.Displays;
-
         LoadFromSettings();
+        RebuildDisplayList();
         UpdateDisplayStatus();
 
         _settings.PropertyChanged += OnSettingsPropertyChanged;
@@ -71,7 +69,6 @@ public sealed partial class SettingsWindow : Window
         PercentToggle.IsOn = _settings.ShowPercentText;
         MultiMonitorToggle.IsOn = _settings.MultiMonitorEnabled;
         UpdateColorPickerVisibility();
-        SelectDefaultMonitor();
 
         if (_app.Controller.Displays.Target is { } target)
         {
@@ -81,13 +78,26 @@ public sealed partial class SettingsWindow : Window
         ApplyTheme();
     }
 
-    private void SelectDefaultMonitor()
+    private readonly List<string> _defaultMonitorIds = [];
+
+    // NativeAOT: rows are UserControls added to Items in code; the combo holds
+    // display names with a parallel id list. No managed collections cross the ABI.
+    private void RebuildDisplayList()
     {
-        DefaultMonitorComboBox.DisplayMemberPath = nameof(DisplayViewModel.Name);
-        var selected = _app.Controller.Displays.Displays
-            .FirstOrDefault(d => d.Id == _settings.DefaultMonitorId)
-            ?? _app.Controller.Displays.Displays.FirstOrDefault();
-        DefaultMonitorComboBox.SelectedItem = selected;
+        DisplayStatusItems.Items.Clear();
+        _defaultMonitorIds.Clear();
+        DefaultMonitorComboBox.Items.Clear();
+
+        foreach (var display in _app.Controller.Displays.Displays)
+        {
+            DisplayStatusItems.Items.Add(new DisplaySettingsRow { Display = display });
+            _defaultMonitorIds.Add(display.Id);
+            DefaultMonitorComboBox.Items.Add(display.Name);
+        }
+
+        var index = _defaultMonitorIds.IndexOf(_settings.DefaultMonitorId);
+        DefaultMonitorComboBox.SelectedIndex = index >= 0 ? index
+            : _defaultMonitorIds.Count > 0 ? 0 : -1;
     }
 
     /// <summary>Applies the app's effective theme (system theme is tracked by App).</summary>
@@ -115,7 +125,7 @@ public sealed partial class SettingsWindow : Window
     private void OnDisplaysChanged()
     {
         UpdateDisplayStatus();
-        SelectDefaultMonitor();
+        RebuildDisplayList();
         if (_app.Controller.Displays.Target is { } target)
         {
             SetSlider(target.Brightness);
@@ -155,9 +165,11 @@ public sealed partial class SettingsWindow : Window
 
     private void OnDefaultMonitorChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_initializing && DefaultMonitorComboBox.SelectedItem is DisplayViewModel selected)
+        if (!_initializing
+            && DefaultMonitorComboBox.SelectedIndex is var index
+            && index >= 0 && index < _defaultMonitorIds.Count)
         {
-            _settings.DefaultMonitorId = selected.Id;
+            _settings.DefaultMonitorId = _defaultMonitorIds[index];
         }
     }
 

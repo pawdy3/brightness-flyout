@@ -80,10 +80,15 @@ internal sealed class DdcCiDisplayController : IDisplayController
         var all = EnumerateAll();
         try
         {
+            // NOTE: hPhysicalMonitor can legitimately be zero on some systems -
+            // zero is a valid handle here, not a "no match" sentinel.
             var match = all.FirstOrDefault(m =>
                 m.DeviceName == _deviceName &&
                 m.Monitor.szPhysicalMonitorDescription == _description);
-            if (match.Monitor.hPhysicalMonitor == IntPtr.Zero)
+            bool found = all.Any(m =>
+                m.DeviceName == _deviceName &&
+                m.Monitor.szPhysicalMonitorDescription == _description);
+            if (!found)
             {
                 IsAvailable = false;
                 return default;
@@ -162,7 +167,7 @@ internal sealed class DdcCiDisplayController : IDisplayController
 
     private void WriteCore(int percent)
     {
-        WithHandle<int>(handle =>
+        var result = WithHandle<int>(handle =>
         {
             if (NativeMethods.GetVCPFeatureAndVCPFeatureReply(
                     handle, NativeMethods.VCP_CODE_LUMINANCE, IntPtr.Zero, out _, out var maximum) && maximum > 0)
@@ -174,5 +179,10 @@ internal sealed class DdcCiDisplayController : IDisplayController
             // Some monitors accept 0-100 even when the capability read fails.
             return (NativeMethods.SetVCPFeature(handle, NativeMethods.VCP_CODE_LUMINANCE, (uint)percent), 0);
         });
+
+        if (!result.HasValue)
+        {
+            Log.Write($"DDC write of {percent} failed: no handle match for {Id}");
+        }
     }
 }

@@ -30,6 +30,9 @@ public sealed class OsdManager
     /// <summary>HWND of the first OSD window (raw-input message target).</summary>
     public IntPtr Hwnd => _windows[0].Hwnd;
 
+    /// <summary>DispatcherQueue of the first OSD window.</summary>
+    public Microsoft.UI.Dispatching.DispatcherQueue DispatcherQueue => _windows[0].DispatcherQueue;
+
     public void BindDisplays(DisplayManager displays)
     {
         _displays = displays;

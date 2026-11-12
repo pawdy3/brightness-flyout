@@ -93,52 +93,9 @@
                     Spacing="4"
                     Visibility="Collapsed">
 
-                    <ItemsControl x:Name="DisplayItems">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:DisplayViewModel">
-                                <Grid Height="34" ColumnSpacing="10">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="14" />
-                                        <ColumnDefinition Width="110" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="44" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <TextBlock
-                                        VerticalAlignment="Center"
-                                        FontSize="8"
-                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                        Text="&#x25CF;"
-                                        Visibility="{x:Bind TargetMarkerVisibility, Mode=OneWay}" />
-
-                                    <TextBlock
-                                        Grid.Column="1"
-                                        VerticalAlignment="Center"
-                                        FontSize="12"
-                                        Text="{x:Bind Name}"
-                                        TextTrimming="CharacterEllipsis"
-                                        ToolTipService.ToolTip="{x:Bind Summary}" />
-
-                                    <Slider
-                                        Grid.Column="2"
-                                        VerticalAlignment="Center"
-                                        Maximum="100"
-                                        Minimum="0"
-                                        StepFrequency="1"
-                                        Value="{x:Bind Brightness, Mode=TwoWay}" />
-
-                                    <TextBlock
-                                        Grid.Column="3"
-                                        VerticalAlignment="Center"
-                                        FontSize="12"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        TextAlignment="Right">
-                                        <Run Text="{x:Bind Brightness, Mode=OneWay}" /><Run Text="%" />
-                                    </TextBlock>
-                                </Grid>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <!-- Rows (DisplayRowControl) are added to Items in code:
+                         managed collections via ItemsSource break under NativeAOT. -->
+                    <ItemsControl x:Name="DisplayItems" />
 
                     <Grid Margin="0,8,0,4" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>

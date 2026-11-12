@@ -73,7 +73,15 @@ internal sealed class BrightnessController : IDisposable
 
     public async Task RefreshDisplaysAsync()
     {
-        await Displays.RefreshAsync();
+        try
+        {
+            await Displays.RefreshAsync();
+            Log.Write($"Displays refreshed: {Displays.Displays.Count} found, target={(Displays.Target?.Name ?? "none")}");
+        }
+        catch (Exception ex)
+        {
+            Log.Write("Display refresh failed", ex);
+        }
 
         // The WMI event watcher is only meaningful with an internal panel present.
         if (Displays.Displays.Any(d => d.Controller is WmiDisplayController))
@@ -106,17 +114,30 @@ internal sealed class BrightnessController : IDisposable
 
     private void OnBrightnessStepRequested(BrightnessDirection direction)
     {
-        _dispatcherQueue.TryEnqueue(() =>
+        var enqueued = _dispatcherQueue.TryEnqueue(() =>
         {
-            var target = Displays.Target;
-            if (target is null)
+            try
             {
-                return;
-            }
+                var target = Displays.Target;
+                if (target is null)
+                {
+                    Log.Write("Step ignored: no target display");
+                    return;
+                }
 
-            var value = Math.Clamp(target.Brightness + _settings.BrightnessStep * (int)direction, 0, 100);
-            ApplyBrightness(value);
+                var value = Math.Clamp(target.Brightness + _settings.BrightnessStep * (int)direction, 0, 100);
+                ApplyBrightness(value);
+            }
+            catch (Exception ex)
+            {
+                Log.Write("Brightness step failed", ex);
+            }
         });
+
+        if (!enqueued)
+        {
+            Log.Write("DispatcherQueue.TryEnqueue returned false");
+        }
     }
 
     /// <summary>Laptop path: Windows itself changed the internal panel brightness

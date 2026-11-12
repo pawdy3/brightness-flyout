@@ -61,26 +61,31 @@ attaches them to a GitHub Release when a `v*` tag is pushed:
 
 | Artifact | Size | Prerequisites |
 |---|---|---|
-| `BrightFlyoutSetup-*.exe` | ~56 MB | none (per-user install, optional autostart) |
-| `BrightFlyout-win-x64.zip` | ~200 MB | none (self-contained single-file exe) |
-| `BrightFlyout-win-x64-minimal.zip` | ~38 MB | .NET Desktop Runtime 10 + Windows App SDK 1.8 runtime |
+| `BrightFlyout-win-x64.zip` | ~9 MB | none (NativeAOT single exe) |
+| `BrightFlyoutSetup-*.exe` | ~8 MB | none - the installer checks for .NET Desktop Runtime 10 and Windows App SDK 1.8 and downloads/installs them automatically (UAC prompt) if missing |
 
 ```powershell
-git tag v1.0.2
-git push origin v1.0.2
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
 Local equivalents:
 
 ```powershell
-# self-contained single file
-dotnet publish -c Release -p:Platform=x64 -r win-x64 --self-contained `
-  -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=true `
-  -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableMsixTooling=true
+# NativeAOT single exe (needs MSVC C++ build tools)
+dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:PublishAot=true -p:EnableMsixTooling=true
+
+# framework-dependent payload for the installer
+dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-self-contained `
+  -p:WindowsAppSDKSelfContained=false -p:EnableMsixTooling=true -p:PublishDir=bin\fd-publish
 
 # installer (requires Inno Setup 6, ISCC.exe on PATH)
-ISCC.exe installer.iss /DAppVersion=1.0.2
+ISCC.exe installer.iss /DAppVersion=1.0.3 /DFdPublishDir=bin\fd-publish
 ```
+
+Note: the AOT exe does not exercise the WMI (internal laptop panel) path as
+robustly - System.Management is not AOT-clean. If internal-panel control
+misbehaves in the AOT build, use the installer variant instead.
 
 ## Notes
 

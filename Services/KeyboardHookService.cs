@@ -57,6 +57,15 @@ internal sealed class KeyboardHookService : IDisposable
         _hookHandle = NativeMethods.SetWindowsHookExW(
             NativeMethods.WH_KEYBOARD_LL, _hookProc, NativeMethods.GetModuleHandleW(null), 0);
 
+        if (_hookHandle == IntPtr.Zero)
+        {
+            Log.Write($"SetWindowsHookEx failed, win32={Marshal.GetLastWin32Error()}");
+        }
+        else
+        {
+            Log.Write($"Keyboard hook installed (0x{_hookHandle.ToInt64():X})");
+        }
+
         AttachRawInput();
         SetRawInputEnabled(_settings.EnableRawInput);
     }

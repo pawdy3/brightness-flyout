@@ -3,7 +3,6 @@
     x:Class="BrightFlyout.Views.SettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:vm="using:BrightFlyout.ViewModels"
     Title="BrightFlyout Settings">
 
     <Grid x:Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
@@ -42,30 +41,9 @@
                     CornerRadius="8">
                     <StackPanel Spacing="8">
                         <TextBlock FontWeight="SemiBold" Text="Displays" />
-                        <ItemsControl x:Name="DisplayStatusItems">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:DisplayViewModel">
-                                    <Grid Margin="0,4" ColumnSpacing="12">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel>
-                                            <TextBlock FontSize="13" Text="{x:Bind Name}" />
-                                            <TextBlock
-                                                FontSize="12"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                Text="{x:Bind Technology}" />
-                                        </StackPanel>
-                                        <CheckBox
-                                            Grid.Column="1"
-                                            VerticalAlignment="Center"
-                                            Content="Control"
-                                            IsChecked="{x:Bind IsIncluded, Mode=TwoWay}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <!-- Rows (DisplaySettingsRow) are added to Items in code:
+                             managed collections via ItemsSource break under NativeAOT. -->
+                        <ItemsControl x:Name="DisplayStatusItems" />
                         <TextBlock
                             x:Name="NoDisplaysText"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"

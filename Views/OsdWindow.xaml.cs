@@ -117,14 +117,43 @@ public sealed partial class OsdWindow : Window
     public void BindDisplays(DisplayManager displays)
     {
         _displays = displays;
-        DisplayItems.ItemsSource = displays.IncludedDisplays;
         SyncToggle.IsOn = _settings.SyncMonitors;
+        RebuildDisplayRows();
         UpdateExpandButtonVisibility();
+    }
+
+    // Rows are DisplayRowControl UserControls added to ItemsControl.Items in code:
+    // passing managed collections via ItemsSource crosses the WinRT ABI and breaks
+    // NativeAOT, while adding UI elements is safe. Row content stays declarative.
+    private string _rowsFingerprint = string.Empty;
+
+    private void RebuildDisplayRows()
+    {
+        var fingerprint = _displays is null
+            ? string.Empty
+            : string.Join("|", _displays.IncludedDisplays.Select(d => d.Id));
+        if (fingerprint == _rowsFingerprint)
+        {
+            return;
+        }
+
+        _rowsFingerprint = fingerprint;
+        DisplayItems.Items.Clear();
+        if (_displays is null)
+        {
+            return;
+        }
+
+        foreach (var display in _displays.IncludedDisplays)
+        {
+            DisplayItems.Items.Add(new DisplayRowControl { Display = display });
+        }
     }
 
     /// <summary>Called when the display list or a display's value changed.</summary>
     public void RefreshDisplays()
     {
+        RebuildDisplayRows();
         UpdateExpandButtonVisibility();
 
         if (_isExpanded)

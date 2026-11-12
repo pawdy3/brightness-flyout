@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="BrightFlyout.Views.DisplaySettingsRow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Margin="0,4" ColumnSpacing="12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <StackPanel>
+            <TextBlock FontSize="13" Text="{x:Bind Display.Name, Mode=OneWay, FallbackValue=''}" />
+            <TextBlock
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{x:Bind Display.Technology, Mode=OneWay, FallbackValue=''}" />
+        </StackPanel>
+        <CheckBox
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            Content="Control"
+            IsChecked="{x:Bind Display.IsIncluded, Mode=TwoWay, FallbackValue=False}" />
+    </Grid>
+</UserControl>

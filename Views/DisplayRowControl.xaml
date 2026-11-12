@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="BrightFlyout.Views.DisplayRowControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Grid Height="34" ColumnSpacing="10">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="14" />
+            <ColumnDefinition Width="110" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="44" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock
+            VerticalAlignment="Center"
+            FontSize="8"
+            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+            Text="&#x25CF;"
+            Visibility="{x:Bind Display.TargetMarkerVisibility, Mode=OneWay, FallbackValue=Collapsed}" />
+
+        <TextBlock
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            FontSize="12"
+            Text="{x:Bind Display.Name, Mode=OneWay, FallbackValue=''}"
+            TextTrimming="CharacterEllipsis"
+            ToolTipService.ToolTip="{x:Bind Display.Summary, Mode=OneWay, FallbackValue=''}" />
+
+        <Slider
+            Grid.Column="2"
+            VerticalAlignment="Center"
+            Maximum="100"
+            Minimum="0"
+            StepFrequency="1"
+            Value="{x:Bind Display.Brightness, Mode=TwoWay, FallbackValue=0}" />
+
+        <TextBlock
+            Grid.Column="3"
+            VerticalAlignment="Center"
+            FontSize="12"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            TextAlignment="Right">
+            <Run Text="{x:Bind Display.Brightness, Mode=OneWay, FallbackValue=0}" /><Run Text="%" />
+        </TextBlock>
+    </Grid>
+</UserControl>

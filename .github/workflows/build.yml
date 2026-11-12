@@ -23,26 +23,24 @@ jobs:
       - name: Restore
         run: dotnet restore -p:Platform=x64 -r win-x64
 
-      - name: Publish (self-contained single file)
+      # Artifact 1: NativeAOT single exe (~9 MB, zero prerequisites).
+      - name: Publish (NativeAOT)
         run: >-
-          dotnet publish -c Release -p:Platform=x64 -r win-x64 --self-contained --no-restore
-          -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableMsixTooling=true
+          dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-restore
+          -p:PublishAot=true -p:EnableMsixTooling=true
 
-      - name: Package self-contained zip
+      - name: Package AOT exe
         shell: pwsh
         run: |
           $publish = "bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\publish"
           Compress-Archive -Path "$publish\BrightFlyout.exe" -DestinationPath "BrightFlyout-win-x64.zip" -Force
 
-      - name: Publish (framework-dependent, minimal)
+      # Artifact 2: framework-dependent build + installer that bootstraps
+      # missing prerequisites (.NET Desktop Runtime 10, Windows App SDK 1.8).
+      - name: Publish (framework-dependent)
         run: >-
-          dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-self-contained
-          -p:WindowsAppSDKSelfContained=false -p:PublishDir=bin\fd-publish
-
-      - name: Package minimal zip
-        shell: pwsh
-        run: Compress-Archive -Path "bin\fd-publish\*" -DestinationPath "BrightFlyout-win-x64-minimal.zip" -Force
+          dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-self-contained --no-restore
+          -p:WindowsAppSDKSelfContained=false -p:EnableMsixTooling=true -p:PublishDir=bin\fd-publish
 
       - name: Build installer (Inno Setup)
         shell: pwsh
@@ -51,7 +49,7 @@ jobs:
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           $version = "${{ github.ref_name }}".TrimStart('v')
           if ("${{ github.ref_type }}" -ne "tag") { $version = "0.0.0" }
-          & $iscc installer.iss /DAppVersion=$version
+          & $iscc installer.iss /DAppVersion=$version /DFdPublishDir=bin\fd-publish
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -59,7 +57,6 @@ jobs:
           name: BrightFlyout-${{ github.sha }}
           path: |
             BrightFlyout-win-x64.zip
-            BrightFlyout-win-x64-minimal.zip
             installer-out/BrightFlyoutSetup-*.exe
           retention-days: 30
 
@@ -69,6 +66,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           gh release create ${{ github.ref_name }}
-          BrightFlyout-win-x64.zip BrightFlyout-win-x64-minimal.zip installer-out/BrightFlyoutSetup-*.exe
+          BrightFlyout-win-x64.zip installer-out/BrightFlyoutSetup-*.exe
           --title "BrightFlyout ${{ github.ref_name }}"
           --generate-notes
