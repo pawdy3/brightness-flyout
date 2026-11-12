@@ -23,8 +23,8 @@ jobs:
       - name: Restore
         run: dotnet restore -p:Platform=x64 -r win-x64
 
-      # Artifact 1: NativeAOT single exe (~9 MB, zero prerequisites).
-      - name: Publish (NativeAOT)
+      # Artifact 1: NativeAOT single exe (~9 MB, zero prerequisites, portable).
+      - name: Publish (NativeAOT exe)
         run: >-
           dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-restore
           -p:PublishAot=true -p:EnableMsixTooling=true
@@ -35,21 +35,35 @@ jobs:
           $publish = "bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\publish"
           Compress-Archive -Path "$publish\BrightFlyout.exe" -DestinationPath "BrightFlyout-win-x64.zip" -Force
 
-      # Artifact 2: framework-dependent build + installer that bootstraps
-      # missing prerequisites (.NET Desktop Runtime 10, Windows App SDK 1.8).
-      - name: Publish (framework-dependent)
-        run: >-
-          dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-self-contained --no-restore
-          -p:WindowsAppSDKSelfContained=false -p:EnableMsixTooling=true -p:PublishDir=bin\fd-publish
-
-      - name: Build installer (Inno Setup)
+      # Artifact 2: MSIX installer (AOT exe + self-contained Windows App SDK,
+      # zero prerequisites). Signed with the stable self-signed cert from the
+      # MSIX_CERT_PFX_BASE64 secret (base64-encoded certs/BrightFlyout.pfx).
+      - name: Decode signing certificate
         shell: pwsh
         run: |
-          choco install innosetup --yes --no-progress
-          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          if ("${{ github.ref_type }}" -ne "tag") { $version = "0.0.0" }
-          & $iscc installer.iss /DAppVersion=$version /DFdPublishDir=bin\fd-publish
+          $b64 = "${{ secrets.MSIX_CERT_PFX_BASE64 }}"
+          if ([string]::IsNullOrWhiteSpace($b64)) {
+            throw "MSIX_CERT_PFX_BASE64 secret is not set. See README -> Distribution."
+          }
+          [IO.File]::WriteAllBytes("cert.pfx", [Convert]::FromBase64String($b64))
+          $cert = [Security.Cryptography.X509Certificates.X509Certificate2]::new("cert.pfx")
+          [IO.File]::WriteAllBytes("BrightFlyout.cer", $cert.Export([Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+
+      # The MSIX identity version comes from the csproj <Version> (X.Y.Z -> X.Y.Z.0).
+      - name: Stamp package version
+        shell: pwsh
+        run: |
+          $v = ([xml](Get-Content BrightFlyout.csproj)).Project.PropertyGroup.Version | Select-Object -First 1
+          $m = [IO.File]::ReadAllText("Package.appxmanifest")
+          $m = $m -replace '(<Identity[^>]*Version=")[\d.]+(")', "`${1}$v.0`${2}"
+          [IO.File]::WriteAllText("Package.appxmanifest", $m, [Text.UTF8Encoding]::new($true))
+
+      - name: Publish (MSIX)
+        run: >-
+          dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-restore
+          -p:BuildMSIX=true -p:PublishAot=true -p:EnableMsixTooling=true
+          -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
+          -p:PackageCertificateKeyFile=cert.pfx
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -57,15 +71,17 @@ jobs:
           name: BrightFlyout-${{ github.sha }}
           path: |
             BrightFlyout-win-x64.zip
-            installer-out/BrightFlyoutSetup-*.exe
+            AppPackages/**/*_x64.msix
+            BrightFlyout.cer
           retention-days: 30
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           gh release create ${{ github.ref_name }}
-          BrightFlyout-win-x64.zip installer-out/BrightFlyoutSetup-*.exe
+          BrightFlyout-win-x64.zip (Get-Item AppPackages/**/*_x64.msix).FullName BrightFlyout.cer
           --title "BrightFlyout ${{ github.ref_name }}"
           --generate-notes

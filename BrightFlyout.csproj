@@ -12,10 +12,25 @@
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <UseWinUI>true</UseWinUI>
-    <WindowsPackageType>None</WindowsPackageType>
+    <!-- Unpackaged by default; pass -p:BuildMSIX=true for a packaged (MSIX) build. -->
+    <WindowsPackageType Condition="'$(BuildMSIX)' != 'true'">None</WindowsPackageType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <!-- MSIX packaging: self-contained Windows App SDK, sideload package. -->
+  <PropertyGroup Condition="'$(BuildMSIX)' == 'true'">
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+    <AppxBundle>Never</AppxBundle>
+    <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
+    <UapAppxPackageBuildMode>SideloadOnly</UapAppxPackageBuildMode>
+    <AppxAutoIncrementPackageRevision>false</AppxAutoIncrementPackageRevision>
+    <DefaultLanguage>en-US</DefaultLanguage>
+    <AppxPackageDir>AppPackages\</AppxPackageDir>
+    <!-- Local convenience: sign with the dev cert if present (CI passes this explicitly). -->
+    <PackageCertificateKeyFile Condition="'$(PackageCertificateKeyFile)' == '' and Exists('certs\BrightFlyout.pfx')">certs\BrightFlyout.pfx</PackageCertificateKeyFile>
   </PropertyGroup>
 
   <ItemGroup>

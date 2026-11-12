@@ -56,18 +56,51 @@ double-click opens Settings directly.
 
 ## Distribution
 
-CI (`.github/workflows/build.yml`) produces three artifacts on every push, and
+CI (`.github/workflows/build.yml`) produces two artifacts on every push, and
 attaches them to a GitHub Release when a `v*` tag is pushed:
 
 | Artifact | Size | Prerequisites |
 |---|---|---|
-| `BrightFlyout-win-x64.zip` | ~9 MB | none (NativeAOT single exe) |
-| `BrightFlyoutSetup-*.exe` | ~8 MB | none - the installer checks for .NET Desktop Runtime 10 and Windows App SDK 1.8 and downloads/installs them automatically (UAC prompt) if missing |
+| `BrightFlyout-win-x64.zip` | ~9 MB | none (NativeAOT single exe, portable) |
+| `BrightFlyout_*_x64.msix` | ~45 MB | none (NativeAOT exe + self-contained Windows App SDK; cert trust, see below) |
+
+Both contain the same NativeAOT build; the MSIX additionally bundles the Windows
+App SDK so it is a proper installer: Start Menu entry, Settings > Apps uninstall,
+and in-place upgrades (installing a newer `.msix` upgrades the app and keeps
+settings).
+
+### Installing the MSIX (one-time cert trust)
+
+The package is signed with a self-signed certificate, so Windows requires the
+cert to be trusted once per machine (needs admin):
+
+```powershell
+# one-time, in an elevated terminal, using the BrightFlyout.cer shipped with the release:
+Import-Certificate -FilePath BrightFlyout.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
+
+# then double-click the .msix, or:
+Add-AppxPackage .\BrightFlyout_1.0.3.0_x64.msix
+```
+
+Without this step, installation fails with `0x800B0109` (untrusted root).
+
+### Releasing
 
 ```powershell
 git tag v1.0.3
 git push origin v1.0.3
 ```
+
+CI signs the MSIX with the stable cert from the **`MSIX_CERT_PFX_BASE64`**
+repository secret (base64 of `certs\BrightFlyout.pfx`):
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("certs\BrightFlyout.pfx"))
+# -> GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret
+```
+
+Keep `certs\` private (gitignored) and back it up - a new cert means every
+machine has to trust it again before upgrading. The cert is valid until 2051.
 
 Local equivalents:
 
@@ -75,20 +108,17 @@ Local equivalents:
 # NativeAOT single exe (needs MSVC C++ build tools)
 dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:PublishAot=true -p:EnableMsixTooling=true
 
-# framework-dependent payload for the installer
-dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-self-contained `
-  -p:WindowsAppSDKSelfContained=false -p:EnableMsixTooling=true -p:PublishDir=bin\fd-publish
-
-# installer (requires Inno Setup 6, ISCC.exe on PATH)
-ISCC.exe installer.iss /DAppVersion=1.0.3 /DFdPublishDir=bin\fd-publish
+# MSIX (signed with certs\BrightFlyout.pfx if present)
+dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=true `
+  -p:EnableMsixTooling=true -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
+# -> AppPackages\BrightFlyout_<version>_x64_Test\BrightFlyout_<version>_x64.msix
 ```
 
-Note: the AOT exe does not exercise the WMI (internal laptop panel) path as
-robustly - System.Management is not AOT-clean. If internal-panel control
-misbehaves in the AOT build, use the installer variant instead.
+Note: System.Management (the WMI path for internal laptop panels) is not
+AOT-clean. If internal-panel control misbehaves in these builds, build locally
+without `-p:PublishAot=true`.
 
 ## Notes
 
-- Only the **primary** display is controlled (single-display scope by design).
 - If your keyboard emits actual virtual-key codes for brightness instead of HID
   consumer usages, set them (hex) under *Settings → Keyboard input*.

@@ -1,5 +1,8 @@
 bin/
 obj/
-installer-out/
 .vs/
 *.user
+AppPackages/
+certs/
+cert.pfx
+BrightFlyout.cer
