@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using BrightFlyout.Services;
 using BrightFlyout.ViewModels;
 using Microsoft.UI;
@@ -299,6 +300,12 @@ public sealed partial class SettingsWindow : Window
     private void OnPreviewClick(object sender, RoutedEventArgs e)
     {
         _app.Controller.PreviewOsd();
+    }
+
+    private async void OnWmiSelfTestClick(object sender, RoutedEventArgs e)
+    {
+        WmiSelfTestResult.Text = "Running...";
+        WmiSelfTestResult.Text = await Task.Run(Services.Displays.WmiDisplayController.SelfTest);
     }
 
     private async void OnRefreshDisplaysClick(object sender, RoutedEventArgs e)

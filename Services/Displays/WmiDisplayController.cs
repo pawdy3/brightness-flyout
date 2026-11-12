@@ -76,9 +76,10 @@ internal sealed class WmiDisplayController : IDisplayController
                 IsAvailable = false;
             }
         }
-        catch
+        catch (Exception ex)
         {
             IsAvailable = false;
+            Log.Write($"WMI brightness read failed ({_instanceName})", ex);
         }
 
         return CurrentBrightness;
@@ -111,31 +112,38 @@ internal sealed class WmiDisplayController : IDisplayController
                 methods.ExecuteMethod<uint>(method, parameters, out _);
                 IsAvailable = true;
             }
-            catch
+            catch (Exception ex)
             {
                 IsAvailable = false;
+                Log.Write($"WMI brightness write failed ({_instanceName})", ex);
             }
         });
     }
 
-    /// <summary>Diagnostic hook (BRIGHTFLYOUT_WMI_SELFTEST): proves the WMI path
-    /// works on any machine, even without an internal panel.</summary>
-    public static void SelfTest()
+    /// <summary>Diagnostic hook (BRIGHTFLYOUT_WMI_SELFTEST, or the Settings button):
+    /// proves the WMI path works on any machine, even without an internal panel.
+    /// Returns and logs a one-line summary.</summary>
+    public static string SelfTest()
     {
+        string summary;
         try
         {
-            Log.Write($"WMI self-test: {EnumerateInstanceNames().Count} brightness instance(s)");
+            var instanceCount = EnumerateInstanceNames().Count;
 
             using var connection = new WmiConnection(); // default namespace: root\cimv2
             var caption = connection.CreateQuery("SELECT Caption FROM Win32_OperatingSystem")
                 .Select(o => o["Caption"]?.ToString())
                 .FirstOrDefault();
-            Log.Write($"WMI self-test: OS caption query -> '{caption ?? "(null)"}'");
+
+            summary = $"OK: {instanceCount} brightness instance(s); OS query -> '{caption ?? "(null)"}'";
         }
         catch (Exception ex)
         {
-            Log.Write("WMI self-test failed", ex);
+            summary = $"FAILED: {ex.Message}";
         }
+
+        Log.Write($"WMI self-test: {summary}");
+        return summary;
     }
 
     private static string EscapeWmi(string value) => value.Replace("\\", "\\\\").Replace("'", "\\'");

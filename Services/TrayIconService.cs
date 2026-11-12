@@ -30,9 +30,22 @@ internal sealed unsafe class TrayIconService : IDisposable
     private readonly HICON _hIcon;
     private string _tooltip;
     private bool _iconAdded;
+    private HDEVNOTIFY _monitorNotify;
+
+    /// <summary>The message-only window backing the tray icon. Lives for the whole
+    /// process (unlike OSD windows, which are recreated on topology changes), so it
+    /// doubles as the durable target for raw input and broadcast messages.</summary>
+    internal HWND Hwnd => _hwnd;
 
     public event Action? SettingsRequested;
     public event Action? ExitRequested;
+
+    /// <summary>Raised on the UI thread for WM_INPUT delivered to the tray window.</summary>
+    public event Action<LPARAM>? RawInputMessage;
+
+    /// <summary>Raised on the UI thread on WM_DISPLAYCHANGE or monitor
+    /// device-interface arrival/removal (input-source switches included).</summary>
+    public event Action? DisplayChangeBroadcast;
 
     public TrayIconService(string tooltip, HICON hIcon)
     {
@@ -41,7 +54,44 @@ internal sealed unsafe class TrayIconService : IDisposable
         _instance = this;
 
         _hwnd = CreateMessageWindow();
+        RegisterMonitorNotifications();
         AddIcon();
+    }
+
+    /// <summary>Monitor input-source switches and cable events surface as monitor
+    /// device-interface arrival/removal - sometimes without a WM_DISPLAYCHANGE.</summary>
+    private void RegisterMonitorNotifications()
+    {
+        if (_hwnd.IsNull)
+        {
+            return;
+        }
+
+        var filter = new DEV_BROADCAST_DEVICEINTERFACE_W
+        {
+            dbcc_size = (uint)Marshal.SizeOf<DEV_BROADCAST_DEVICEINTERFACE_W>(),
+            dbcc_devicetype = (uint)DEV_BROADCAST_HDR_DEVICE_TYPE.DBT_DEVTYP_DEVICEINTERFACE,
+            dbcc_classguid = PInvoke.GUID_DEVINTERFACE_MONITOR,
+        };
+
+        _monitorNotify = PInvoke.RegisterDeviceNotification(_hwnd, &filter, REGISTER_NOTIFICATION_FLAGS.DEVICE_NOTIFY_WINDOW_HANDLE);
+        if (_monitorNotify.IsNull)
+        {
+            Log.Write($"RegisterDeviceNotification failed, win32={Marshal.GetLastWin32Error()}");
+        }
+    }
+
+    private static bool IsMonitorDeviceChange(WPARAM wParam, LPARAM lParam)
+    {
+        var changeType = (uint)wParam.Value;
+        if (changeType is not (PInvoke.DBT_DEVICEARRIVAL or PInvoke.DBT_DEVICEREMOVECOMPLETE) || lParam.Value == 0)
+        {
+            return false;
+        }
+
+        var header = (DEV_BROADCAST_HDR*)lParam.Value;
+        return header->dbch_devicetype == DEV_BROADCAST_HDR_DEVICE_TYPE.DBT_DEVTYP_DEVICEINTERFACE
+            && ((DEV_BROADCAST_DEVICEINTERFACE_W*)header)->dbcc_classguid == PInvoke.GUID_DEVINTERFACE_MONITOR;
     }
 
     public void SetToolTip(string tooltip)
@@ -175,6 +225,24 @@ internal sealed unsafe class TrayIconService : IDisposable
             return (LRESULT)0;
         }
 
+        if (msg == PInvoke.WM_INPUT)
+        {
+            _instance?.RawInputMessage?.Invoke(lParam);
+            return (LRESULT)0;
+        }
+
+        if (msg == PInvoke.WM_DISPLAYCHANGE)
+        {
+            _instance?.DisplayChangeBroadcast?.Invoke();
+            return PInvoke.DefWindowProc(hWnd, msg, wParam, lParam);
+        }
+
+        if (msg == PInvoke.WM_DEVICECHANGE && IsMonitorDeviceChange(wParam, lParam))
+        {
+            _instance?.DisplayChangeBroadcast?.Invoke();
+            return PInvoke.DefWindowProc(hWnd, msg, wParam, lParam);
+        }
+
         if (msg == _wmTaskbarCreated && _wmTaskbarCreated != 0)
         {
             // Explorer restarted: re-register the icon.
@@ -248,6 +316,11 @@ internal sealed unsafe class TrayIconService : IDisposable
     public void Dispose()
     {
         RemoveIcon();
+
+        if (!_monitorNotify.IsNull)
+        {
+            PInvoke.UnregisterDeviceNotification(_monitorNotify);
+        }
 
         if (!_hwnd.IsNull)
         {

@@ -57,6 +57,10 @@ internal sealed unsafe class KeyboardHookService : IDisposable
         _repeatTimer = new System.Threading.Timer(OnRepeatTick, null, Timeout.Infinite, Timeout.Infinite);
     }
 
+    /// <summary>Installs the keyboard hook and (when <paramref name="rawInputTargetHwnd"/>
+    /// is non-null) registers raw input against it. The target must be a window that
+    /// lives for the whole process (the tray message window) and forwards WM_INPUT
+    /// to <see cref="ProcessRawInputMessage"/>.</summary>
     public void Install(HWND rawInputTargetHwnd)
     {
         _rawInputHwnd = rawInputTargetHwnd;
@@ -75,9 +79,11 @@ internal sealed unsafe class KeyboardHookService : IDisposable
             Log.Write($"Keyboard hook installed (0x{(nint)_hookHandle.Value:X})");
         }
 
-        AttachRawInput();
         SetRawInputEnabled(_settings.EnableRawInput);
     }
+
+    /// <summary>Handles a WM_INPUT message forwarded from the raw-input target window.</summary>
+    public void ProcessRawInputMessage(LPARAM lParam) => HandleRawInput(new HRAWINPUT(lParam.Value));
 
     /// <summary>Enables/disables Raw Input listening at runtime (no restart needed).</summary>
     public void SetRawInputEnabled(bool enabled)
@@ -140,23 +146,6 @@ internal sealed unsafe class KeyboardHookService : IDisposable
     #endregion
 
     #region Raw Input (HID consumer control 0x006F / 0x0070)
-
-    private void AttachRawInput()
-    {
-        // Subclass once; WM_INPUT only arrives while the raw-input registration is active.
-        PInvoke.SetWindowSubclass(_rawInputHwnd, &RawInputSubclassProc, 1, 0);
-    }
-
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static LRESULT RawInputSubclassProc(HWND hWnd, uint uMsg, WPARAM wParam, LPARAM lParam, nuint uIdSubclass, nuint dwRefData)
-    {
-        if (uMsg == PInvoke.WM_INPUT)
-        {
-            _current?.HandleRawInput(new HRAWINPUT(lParam.Value));
-        }
-
-        return PInvoke.DefSubclassProc(hWnd, uMsg, wParam, lParam);
-    }
 
     private void HandleRawInput(HRAWINPUT hRawInput)
     {
@@ -351,7 +340,8 @@ internal sealed unsafe class KeyboardHookService : IDisposable
 
         if (!_rawInputHwnd.IsNull)
         {
-            PInvoke.RemoveWindowSubclass(_rawInputHwnd, &RawInputSubclassProc, 1);
+            SetRawInputEnabled(false);
+            _rawInputHwnd = default;
         }
     }
 }

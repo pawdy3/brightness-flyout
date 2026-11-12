@@ -18,17 +18,17 @@ namespace BrightFlyout.Services;
 /// </summary>
 internal sealed class BrightnessController : IDisposable
 {
-    // Unmanaged callbacks (window subclass) cannot capture; the controller is a singleton.
-    private static BrightnessController? _current;
-
     private readonly SettingsService _settings;
     private readonly OsdManager _osd;
     private readonly KeyboardHookService _hook;
+    private TrayIconService? _tray;
     private readonly WmiBrightnessWatcher _wmiWatcher = new();
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly DispatcherQueueTimer _suppressWatchdog;
     private readonly DispatcherQueueTimer _restoreTimer;
     private readonly DispatcherQueueTimer _hotplugTimer;
+    private readonly DispatcherQueueTimer _pollTimer;
+    private string _lastRefreshFingerprint = string.Empty;
 
     // Excluded-panel revert state (see OnWmiBrightnessChanged).
     private int? _wmiRevertingTo;
@@ -76,21 +76,21 @@ internal sealed class BrightnessController : IDisposable
         _hotplugTimer.IsRepeating = false;
         _hotplugTimer.Interval = TimeSpan.FromMilliseconds(800);
         _hotplugTimer.Tick += (_, _) => _ = RefreshDisplaysAsync();
+
+        // Input-source switches and monitor sleep do not raise WM_DISPLAYCHANGE;
+        // poll so dead/returned DDC links and externally-made changes surface.
+        _pollTimer = _dispatcherQueue.CreateTimer();
+        _pollTimer.Interval = TimeSpan.FromSeconds(15);
+        _pollTimer.Tick += (_, _) => _ = RefreshDisplaysAsync();
     }
 
-    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
-    private static LRESULT DisplayChangeSubclassProc(HWND hWnd, uint uMsg, WPARAM wParam, LPARAM lParam, nuint uIdSubclass, nuint dwRefData)
+    // WM_DISPLAYCHANGE / monitor device-interface arrival arrive via the tray
+    // window (process-lifetime, unlike OSD windows, which are recreated when the
+    // display topology changes). Runs on the UI thread already.
+    private void OnDisplayChangeBroadcast()
     {
-        if (uMsg == PInvoke.WM_DISPLAYCHANGE && _current is { } self)
-        {
-            self._dispatcherQueue.TryEnqueue(() =>
-            {
-                self._hotplugTimer.Stop();
-                self._hotplugTimer.Start();
-            });
-        }
-
-        return PInvoke.DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        _hotplugTimer.Stop();
+        _hotplugTimer.Start();
     }
 
     private void OnOsdAutoHidden()
@@ -100,14 +100,23 @@ internal sealed class BrightnessController : IDisposable
         _restoreTimer.Start();
     }
 
-    public unsafe void Start()
+    public void Start(TrayIconService? tray)
     {
-        _current = this;
-        _hook.Install(_osd.Hwnd);
+        _tray = tray;
+        if (tray is null)
+        {
+            // Hook-only mode: raw input and hotplug detection need a window.
+            Log.Write("Tray window unavailable: raw input and display-change detection disabled");
+            _hook.Install(default);
+        }
+        else
+        {
+            _hook.Install(tray.Hwnd);
+            tray.RawInputMessage += _hook.ProcessRawInputMessage;
+            tray.DisplayChangeBroadcast += OnDisplayChangeBroadcast;
+        }
 
-        // The OSD window is always alive (hidden), so it receives display-change
-        // broadcasts even with no visible UI.
-        PInvoke.SetWindowSubclass(_osd.Hwnd, &DisplayChangeSubclassProc, 3, 0);
+        _pollTimer.Start();
 
         _ = RefreshDisplaysAsync();
     }
@@ -117,7 +126,13 @@ internal sealed class BrightnessController : IDisposable
         try
         {
             await Displays.RefreshAsync();
-            Log.Write($"Displays refreshed: {Displays.Displays.Count} found, target={(Displays.Target?.Name ?? "none")}");
+            // Log only on change: the poll timer would otherwise spam the log.
+            var fingerprint = $"{Displays.Displays.Count}|{Displays.Target?.Name ?? "none"}";
+            if (fingerprint != _lastRefreshFingerprint)
+            {
+                _lastRefreshFingerprint = fingerprint;
+                Log.Write($"Displays refreshed: {Displays.Displays.Count} found, target={Displays.Target?.Name ?? "none"}");
+            }
         }
         catch (Exception ex)
         {
@@ -162,7 +177,7 @@ internal sealed class BrightnessController : IDisposable
 
     private void OnBrightnessStepRequested(BrightnessDirection direction)
     {
-        var enqueued = _dispatcherQueue.TryEnqueue(() =>
+        var enqueued = _dispatcherQueue.TryEnqueue(async () =>
         {
             try
             {
@@ -173,6 +188,9 @@ internal sealed class BrightnessController : IDisposable
                     return;
                 }
 
+                // Re-read before stepping: another device or app may have changed
+                // the display since we last looked (cached values go stale).
+                await target.RefreshAsync();
                 var value = Math.Clamp(target.Brightness + _settings.BrightnessStep * (int)direction, 0, 100);
                 ApplyBrightness(value);
             }
@@ -310,15 +328,21 @@ internal sealed class BrightnessController : IDisposable
         _osd.ShowBrightness(Displays.Target?.Brightness ?? 65);
     }
 
-    public unsafe void Dispose()
+    public void Dispose()
     {
         _osd.AutoHidden -= OnOsdAutoHidden;
         _settings.PropertyChanged -= OnSettingsPropertyChanged;
+        if (_tray is not null)
+        {
+            _tray.RawInputMessage -= _hook.ProcessRawInputMessage;
+            _tray.DisplayChangeBroadcast -= OnDisplayChangeBroadcast;
+            _tray = null;
+        }
+
         _suppressWatchdog.Stop();
         _restoreTimer.Stop();
         _hotplugTimer.Stop();
-        PInvoke.RemoveWindowSubclass(_osd.Hwnd, &DisplayChangeSubclassProc, 3);
-        _current = null;
+        _pollTimer.Stop();
 
         _wmiWatcher.Dispose();
         _hook.Dispose();

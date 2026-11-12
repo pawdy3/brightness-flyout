@@ -88,7 +88,7 @@ public partial class App : Application
         Controller = new BrightnessController(Settings, Osd);
         Controller.BrightnessChanged += OnBrightnessChanged;
         Osd.BindDisplays(Controller.Displays);
-        Controller.Start();
+        Controller.Start(_tray);
 
         // Diagnostics: prove the WMI path works (usable on machines without
         // an internal panel too).
