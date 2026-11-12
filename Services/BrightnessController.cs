@@ -142,6 +142,13 @@ internal sealed class BrightnessController : IDisposable
         {
             _hook.SetRawInputEnabled(_settings.EnableRawInput);
         }
+        else if (e.PropertyName is nameof(SettingsService.DefaultMonitorId)
+            && _settings.DefaultMonitorId is { Length: > 0 } id)
+        {
+            // The configured default wins over the "last touched" target,
+            // effective immediately (flyout selection follows).
+            Displays.SetTarget(id);
+        }
     }
 
     private void OnBrightnessStepRequested(BrightnessDirection direction)
