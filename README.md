@@ -61,8 +61,8 @@ and attaches them to a GitHub Release when a `v*` tag is pushed:
 
 | Artifact | Size | Contains |
 |---|---|---|
-| `BrightFlyout_AOT_x64.msix` | ~4.5 MB | NativeAOT exe only — but the WMI path (internal laptop panels) is not AOT-clean and may misbehave |
-| `BrightFlyout_Hybrid_x64.msix` | ~45 MB | regular build + full .NET 10 runtime (reliable WMI) |
+| `BrightFlyout_AOT_x64.msix` | ~3.8 MB | NativeAOT exe only — but the WMI path (internal laptop panels) is not AOT-clean and may misbehave |
+| `BrightFlyout_Hybrid_x64.msix` | ~10 MB | regular build + trimmed .NET 10 runtime (reliable WMI; System.Management is kept untrimmed) |
 
 Both pull the Windows App SDK 2.6 automatically as a framework package from the
 Microsoft Store during install (one-time, needs network + Store access), and
@@ -119,7 +119,7 @@ dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:Publis
 
 # hybrid MSIX -> AppPackages\..._x64_Test\ (wipe that dir first if you built AOT into it)
 dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=false `
-  -p:SelfContained=true `
+  -p:SelfContained=true -p:PublishTrimmed=true `
   -p:EnableMsixTooling=true -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
 ```
 

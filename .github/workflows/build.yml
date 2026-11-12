@@ -59,13 +59,13 @@ jobs:
           -p:PackageCertificateKeyFile=cert.pfx
           -p:AppxPackageDir=out\aot\
 
-      # Artifact 2: hybrid MSIX - full .NET 10 runtime inside (~45 MB),
-      # reliable WMI path.
+      # Artifact 2: hybrid MSIX - trimmed .NET 10 runtime inside (~10 MB),
+      # reliable WMI path (System.Management is not trimmable and is kept whole).
       - name: Publish MSIX (hybrid)
         run: >-
           dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-restore
           -p:BuildMSIX=true -p:PublishAot=false -p:SelfContained=true
-          -p:EnableMsixTooling=true
+          -p:PublishTrimmed=true -p:EnableMsixTooling=true
           -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
           -p:PackageCertificateKeyFile=cert.pfx
           -p:AppxPackageDir=out\hybrid\

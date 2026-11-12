@@ -33,6 +33,17 @@
     <PackageCertificateKeyFile Condition="'$(PackageCertificateKeyFile)' == '' and Exists('certs\BrightFlyout.pfx')">certs\BrightFlyout.pfx</PackageCertificateKeyFile>
   </PropertyGroup>
 
+  <!-- Packaged apps resolve WASDK via the framework package, so the bootstrapper
+       and background-task host DLLs are dead weight inside the MSIX. -->
+  <Target Name="RemovePackagedOnlyDeadWeight" BeforeTargets="_ComputeAppxPackagePayload" Condition="'$(BuildMSIX)' == 'true'">
+    <ItemGroup>
+      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.FileName)' == 'Microsoft.WindowsAppRuntime.Bootstrap'" />
+      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.FileName)' == 'Microsoft.Windows.ApplicationModel.Background.UniversalBGTask'" />
+      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Name)' == 'BrightFlyout.deps.json' and '$(PublishAot)' == 'true'" />
+      <PackagingOutputs Remove="@(PackagingOutputs)" Condition="'%(PackagingOutputs.Name)' == 'BrightFlyout.runtimeconfig.json' and '$(PublishAot)' == 'true'" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <EmbeddedResource Include="Assets\app.ico" LogicalName="BrightFlyout.app.ico" />
   </ItemGroup>
@@ -48,6 +59,21 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.AI" Version="2.6.5" ExcludeAssets="all" />
     <PackageReference Include="Microsoft.WindowsAppSDK.ML" Version="2.6.5" ExcludeAssets="all" />
     <PackageReference Include="Microsoft.Windows.AI.MachineLearning" Version="2.4.89" ExcludeAssets="all" />
+    <!-- More unused transitive payloads: WebView2 (~1.1 MB) and the
+         Search/Widgets component packages. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3719.77" ExcludeAssets="all" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Search" Version="2.6.5" ExcludeAssets="all" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Widgets" Version="2.6.5" ExcludeAssets="all" />
   </ItemGroup>
+
+  <!-- NativeAOT size tuning: optimize for size, fold identical method bodies,
+       drop debugger support. Deliberately NOT set: UseSystemResourceKeys and
+       StackTraceSupport=false (would ruin the exception messages/stack traces
+       in debug.log), EventSourceSupport, InvariantGlobalization (pl-PL host). -->
+  <PropertyGroup Condition="'$(PublishAot)' == 'true'">
+    <IlcOptimizationPreference>Size</IlcOptimizationPreference>
+    <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
+    <DebuggerSupport>false</DebuggerSupport>
+  </PropertyGroup>
 
 </Project>
