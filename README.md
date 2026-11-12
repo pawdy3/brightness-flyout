@@ -53,11 +53,11 @@ replaces the plain built-in popup with its own Windows-11-style flyout.
 
 ## Install
 
-1. Download `BrightFlyout_AOT_x64.msix`, `BrightFlyout.cer` and
-   `Install-BrightFlyout.ps1` from the latest
-   [release](https://github.com/pawdy3/brightness-flyout/releases) into one
-   folder.
-2. Run the script:
+1. Download `BrightFlyout-<version>-win-x64.zip` from the latest
+   [release](https://github.com/pawdy3/brightness-flyout/releases) and extract
+   it. (The `experimental-aot` zip is a smaller, NativeAOT-compiled build —
+   see [Distribution](#distribution).)
+2. Keep the three extracted files together and run the script:
 
    ```powershell
    .\Install-BrightFlyout.ps1
@@ -145,13 +145,15 @@ directory is kept at `%TEMP%\BrightFlyoutIntegrationTests` for inspection.
 
 ### Release builds
 
-CI (`.github/workflows/build.yml`) produces two MSIX packages on every push,
-and attaches them to a GitHub Release when a `v*` tag is pushed:
+CI (`.github/workflows/build.yml`) produces two packages on every push, and
+attaches them to a GitHub Release when a `v*` tag is pushed. Each zip contains
+the MSIX, the certificate and the install script — everything the script needs
+next to itself:
 
-| Artifact | Size | Contains |
+| Zip | Size | Contains |
 |---|---|---|
-| `BrightFlyout_AOT_x64.msix` | ~5 MB | NativeAOT exe, nothing required — full feature set, including internal laptop panels (WMI via WmiLight, which is AOT-compatible) |
-| `BrightFlyout_Hybrid_x64.msix` | ~11 MB | regular build + trimmed .NET 10 runtime (fallback variant) |
+| `BrightFlyout-<version>-win-x64.zip` | ~11 MB | regular build + trimmed .NET 10 runtime — the recommended build |
+| `BrightFlyout-<version>-win-x64.experimental-aot.zip` | ~5 MB | NativeAOT exe, nothing required — **experimental** (full feature set, including internal laptop panels via the AOT-compatible WmiLight, but NativeAOT + WinUI trimming is less battle-tested) |
 
 (A framework-dependent variant was evaluated and dropped: it still needs ~9 MB
 of WASDK managed projections in the package — MSIX framework packages share
@@ -159,8 +161,7 @@ native code only — and trimming requires self-contained, so it would barely
 beat the hybrid while adding a .NET runtime requirement.)
 
 Both pull the Windows App SDK 2.6 automatically as a framework package from
-the Microsoft Store at install. Pick AOT; the hybrid variant exists as a
-fallback.
+the Microsoft Store at install.
 
 Local equivalents (MSIX variants sign with `certs\BrightFlyout.pfx`
 automatically if present; when publishing both, wipe `bin`/`obj` between them —

@@ -92,7 +92,8 @@ internal sealed class WmiDisplayController : IDisplayController
         percent = Math.Clamp(percent, 0, 100);
         CurrentBrightness = percent;
         // Immediate per-event reverts during a key hold would otherwise queue
-        // dozens of identical WMI writes; the writer keeps only the latest.
+        // dozens of WMI writes; the writer keeps only the latest, but always
+        // writes it - Windows keeps moving the panel behind our back.
         _writer.Set(percent);
     }
 

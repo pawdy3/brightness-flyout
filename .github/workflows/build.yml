@@ -46,8 +46,9 @@ jobs:
       # Microsoft.WindowsAppRuntime.2 framework package from the Store at install
       # (PackageDependency is injected by the build).
       #
-      # Artifact 1: AOT MSIX - NativeAOT exe only (~5 MB). Full feature set:
-      # WMI (internal laptop panels) works via WmiLight, which is AOT-compatible.
+      # Variant 1 (experimental): AOT MSIX - NativeAOT exe only (~5 MB). Full
+      # feature set: WMI (internal laptop panels) works via WmiLight, which is
+      # AOT-compatible.
       # NOTE: no --no-restore and no upfront restore - the ILCompiler toolchain is
       # only pulled in when PublishAot=true is set during restore, so let publish
       # restore itself. MSIX-constant flags (EnableMsixTooling, AppxBundle, ...)
@@ -65,8 +66,7 @@ jobs:
         shell: pwsh
         run: Remove-Item -Recurse -Force bin, obj -ErrorAction SilentlyContinue
 
-      # Artifact 2: hybrid MSIX - trimmed .NET 10 runtime inside (~11 MB).
-      # Fallback variant; the AOT build has full feature parity.
+      # Variant 2 (main): hybrid MSIX - trimmed .NET 10 runtime inside (~11 MB).
       - name: Publish MSIX (hybrid)
         run: >-
           dotnet publish -c Release -p:Platform=x64 -r win-x64
@@ -75,14 +75,23 @@ jobs:
           -p:PackageCertificateKeyFile=cert.pfx
           -p:AppxPackageDir=out\hybrid\
 
+      # Each zip is self-contained: the install script expects the MSIX and the
+      # cert next to itself. Names carry the version; the main (hybrid) zip is
+      # named so it sorts first in the release asset list.
       - name: Stage artifacts
         shell: pwsh
         run: |
+          $v = ([xml](Get-Content BrightFlyout.csproj)).Project.PropertyGroup.Version | Select-Object -First 1
           New-Item -ItemType Directory -Force staging | Out-Null
-          Copy-Item (Get-Item out/aot/**/*_x64.msix).FullName staging/BrightFlyout_AOT_x64.msix
-          Copy-Item (Get-Item out/hybrid/**/*_x64.msix).FullName staging/BrightFlyout_Hybrid_x64.msix
-          Copy-Item BrightFlyout.cer staging/
-          Copy-Item tools/Install-BrightFlyout.ps1 staging/
+          function Pack($msixDir, $zipPath) {
+            $zipStage = Join-Path $env:RUNNER_TEMP ([IO.Path]::GetRandomFileName())
+            New-Item -ItemType Directory -Force $zipStage | Out-Null
+            Copy-Item (Get-Item "$msixDir/**/*_x64.msix").FullName $zipStage/
+            Copy-Item BrightFlyout.cer, tools/Install-BrightFlyout.ps1 $zipStage/
+            Compress-Archive "$zipStage/*" $zipPath
+          }
+          Pack 'out/hybrid' "staging/BrightFlyout-$v-win-x64.zip"
+          Pack 'out/aot' "staging/BrightFlyout-$v-win-x64.experimental-aot.zip"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -98,7 +107,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           gh release create ${{ github.ref_name }}
-          staging/BrightFlyout_AOT_x64.msix staging/BrightFlyout_Hybrid_x64.msix
-          staging/BrightFlyout.cer staging/Install-BrightFlyout.ps1
+          staging/*.zip
           --title "BrightFlyout ${{ github.ref_name }}"
           --generate-notes

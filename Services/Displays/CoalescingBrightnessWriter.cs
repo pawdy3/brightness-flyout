@@ -7,14 +7,19 @@ namespace BrightFlyout.Services.Displays;
 /// bursts: only the newest pending value is ever written (a held key would
 /// otherwise queue dozens of near-identical DDC/CI or WMI writes, both of which
 /// are slow and visible).
+///
+/// Every queued value is written once, even if equal to the previous write:
+/// the hardware can be changed externally (Windows itself moves laptop panels;
+/// monitors have their own buttons), so "same as last written" never means
+/// "already at that value". Coalescing collapses bursts - nothing more.
 /// </summary>
 internal sealed class CoalescingBrightnessWriter
 {
     private readonly object _gate = new();
     private readonly System.Action<int> _write;
     private bool _running;
-    private int _pending = -1;
-    private int _lastWritten = -1;
+    private bool _hasPending;
+    private int _pending;
 
     public CoalescingBrightnessWriter(System.Action<int> write)
     {
@@ -28,6 +33,7 @@ internal sealed class CoalescingBrightnessWriter
         lock (_gate)
         {
             _pending = value;
+            _hasPending = true;
             if (_running)
             {
                 return;
@@ -46,17 +52,17 @@ internal sealed class CoalescingBrightnessWriter
             int value;
             lock (_gate)
             {
-                if (_pending == _lastWritten)
+                if (!_hasPending)
                 {
                     _running = false;
                     return;
                 }
 
+                _hasPending = false;
                 value = _pending;
             }
 
             _write(value);
-            _lastWritten = value;
         }
     }
 }
