@@ -39,7 +39,9 @@ public sealed partial class SettingsWindow : Window
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         var windowId = Win32Interop.GetWindowIdFromWindow(_hwnd);
         _appWindow = AppWindow.GetFromWindowId(windowId);
-        _appWindow.Resize(new Windows.Graphics.SizeInt32(620, 900));
+        _appWindow.Resize(new Windows.Graphics.SizeInt32(820, 780));
+
+        Nav.SelectedItem = Nav.MenuItems[0];
 
         LoadFromSettings();
         RebuildDisplayList();
@@ -157,6 +159,15 @@ public sealed partial class SettingsWindow : Window
         _sliderUpdating = true;
         BrightnessSlider.Value = value;
         _sliderUpdating = false;
+    }
+
+    private void OnNavSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    {
+        var tag = (args.SelectedItem as NavigationViewItem)?.Tag as string;
+        PageDisplays.Visibility = tag == "Displays" ? Visibility.Visible : Visibility.Collapsed;
+        PageFlyout.Visibility = tag == "Flyout" ? Visibility.Visible : Visibility.Collapsed;
+        PageKeyboard.Visibility = tag == "Keyboard" ? Visibility.Visible : Visibility.Collapsed;
+        PageGeneral.Visibility = tag == "General" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     #region Event handlers

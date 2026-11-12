@@ -66,6 +66,7 @@
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.9457" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
     <PackageReference Include="System.Management" Version="9.0.23" />
     <!-- Transitive Windows AI/ML payloads (onnxruntime, DirectML, AI winmds) are
          unused by this app; excluding them saves ~40 MB per package. -->

@@ -22,6 +22,11 @@ internal sealed class BrightnessController : IDisposable
     private readonly DispatcherQueueTimer _hotplugTimer;
     private NativeMethods.SubclassProc? _displayChangeSubclassProc;
 
+    // Excluded-panel revert state (see OnWmiBrightnessChanged).
+    private readonly DispatcherQueueTimer _wmiRevertTimer;
+    private int? _wmiRevertValue;
+    private int? _wmiRevertingTo;
+
     /// <summary>Raised (on the UI thread) whenever the target display's brightness changes.</summary>
     public event Action<int>? BrightnessChanged;
 
@@ -65,6 +70,29 @@ internal sealed class BrightnessController : IDisposable
         _hotplugTimer.IsRepeating = false;
         _hotplugTimer.Interval = TimeSpan.FromMilliseconds(800);
         _hotplugTimer.Tick += (_, _) => _ = RefreshDisplaysAsync();
+
+        // When the internal panel is excluded from control, Windows still changes
+        // it on laptop key presses. Revert those changes once the press burst ends.
+        _wmiRevertTimer = _dispatcherQueue.CreateTimer();
+        _wmiRevertTimer.IsRepeating = false;
+        _wmiRevertTimer.Interval = TimeSpan.FromMilliseconds(250);
+        _wmiRevertTimer.Tick += (_, _) =>
+        {
+            if (_wmiRevertValue is not { } revertTo)
+            {
+                return;
+            }
+
+            _wmiRevertValue = null;
+            var wmiDisplay = Displays.Displays.FirstOrDefault(d => d.Controller is WmiDisplayController);
+            if (wmiDisplay is not null)
+            {
+                Log.Write($"Reverting Windows-made change on excluded panel -> {revertTo}%");
+                _wmiRevertingTo = revertTo;
+                wmiDisplay.Controller.SetBrightness(revertTo);
+                wmiDisplay.SetBrightnessSilently(revertTo);
+            }
+        };
     }
 
     private IntPtr DisplayChangeSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, UIntPtr dwRefData)
@@ -177,7 +205,42 @@ internal sealed class BrightnessController : IDisposable
         _dispatcherQueue.TryEnqueue(() =>
         {
             var wmiDisplay = Displays.Displays.FirstOrDefault(d => d.Controller is WmiDisplayController);
-            if (wmiDisplay is null || Math.Abs(wmiDisplay.Brightness - value) <= 1)
+            if (wmiDisplay is null)
+            {
+                return;
+            }
+
+            // Feedback echo of our own revert write: swallow it.
+            if (_wmiRevertingTo is { } revertingTo && Math.Abs(value - revertingTo) <= 1)
+            {
+                _wmiRevertingTo = null;
+                wmiDisplay.SetBrightnessSilently(value);
+                return;
+            }
+            _wmiRevertingTo = null;
+
+            if (!wmiDisplay.IsIncluded)
+            {
+                // The panel is excluded, but Windows changed it anyway. Revert the
+                // change (debounced per burst) and forward the key press to the
+                // actual target display instead.
+                var direction = Math.Sign(value - wmiDisplay.Brightness);
+                _wmiRevertValue ??= wmiDisplay.Brightness;
+                wmiDisplay.SetBrightnessSilently(value);
+                _wmiRevertTimer.Stop();
+                _wmiRevertTimer.Start();
+
+                if (direction != 0 && Displays.Target is { } target && target != wmiDisplay)
+                {
+                    var stepped = Math.Clamp(
+                        target.Brightness + _settings.BrightnessStep * direction, 0, 100);
+                    ApplyBrightness(stepped);
+                }
+
+                return;
+            }
+
+            if (Math.Abs(wmiDisplay.Brightness - value) <= 1)
             {
                 return; // feedback from our own write, or nothing to do
             }

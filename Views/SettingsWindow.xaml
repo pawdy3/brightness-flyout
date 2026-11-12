@@ -3,6 +3,7 @@
     x:Class="BrightFlyout.Views.SettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:CommunityToolkit.WinUI.Controls"
     Title="BrightFlyout Settings">
 
     <Grid x:Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
@@ -24,93 +25,281 @@
                 Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
         </Grid>
 
-        <ScrollViewer Grid.Row="1" Padding="16,0,16,16">
-            <StackPanel Spacing="12" MaxWidth="560" HorizontalAlignment="Center">
+        <NavigationView
+            x:Name="Nav"
+            Grid.Row="1"
+            IsBackButtonVisible="Collapsed"
+            IsPaneToggleButtonVisible="False"
+            IsSettingsVisible="False"
+            OpenPaneLength="180"
+            PaneDisplayMode="Left"
+            SelectionChanged="OnNavSelectionChanged">
 
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Displays" Tag="Displays">
+                    <NavigationViewItem.Icon>
+                        <FontIcon FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Glyph="&#xE7F4;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Flyout" Tag="Flyout">
+                    <NavigationViewItem.Icon>
+                        <FontIcon FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Glyph="&#xE9F5;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Keyboard" Tag="Keyboard">
+                    <NavigationViewItem.Icon>
+                        <FontIcon FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Glyph="&#xE765;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="General" Tag="General">
+                    <NavigationViewItem.Icon>
+                        <FontIcon FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <NavigationView.PaneFooter>
                 <TextBlock
-                    FontSize="20"
-                    FontWeight="SemiBold"
-                    Text="Settings" />
+                    Margin="16,12"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{x:Bind VersionText}" />
+            </NavigationView.PaneFooter>
 
-                <!-- Displays -->
-                <Border
-                    Padding="16"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8">
-                    <StackPanel Spacing="8">
-                        <Grid>
+            <ScrollViewer Padding="24,8,24,24">
+                <StackPanel MaxWidth="680" Spacing="4">
+
+                    <!-- ==================== Displays ==================== -->
+                    <StackPanel x:Name="PageDisplays" Spacing="4">
+                        <Grid Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="Displays" />
+                            <TextBlock
+                                VerticalAlignment="Center"
+                                FontSize="20"
+                                FontWeight="SemiBold"
+                                Text="Displays" />
                             <Button
                                 x:Name="RefreshDisplaysButton"
                                 Grid.Column="1"
-                                Padding="6,2"
-                                HorizontalAlignment="Right"
+                                Padding="8,4"
+                                VerticalAlignment="Center"
                                 Background="Transparent"
                                 BorderThickness="0"
                                 Click="OnRefreshDisplaysClick"
                                 ToolTipService.ToolTip="Refresh display list">
                                 <FontIcon
                                     FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                    FontSize="12"
+                                    FontSize="13"
                                     Glyph="&#xE72C;" />
                             </Button>
                         </Grid>
+
                         <!-- Rows (DisplaySettingsRow) are added to Items in code; see DisplayRowControl. -->
                         <ItemsControl x:Name="DisplayStatusItems" />
                         <TextBlock
                             x:Name="NoDisplaysText"
+                            Margin="4,4"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                             Text="No controllable displays found."
                             Visibility="Collapsed" />
-                        <StackPanel Spacing="4">
-                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Brightness (keyboard target)" />
+
+                        <controls:SettingsCard
+                            Margin="0,8,0,0"
+                            Header="Brightness (keyboard target)"
+                            Description="Current brightness of the display the keyboard controls">
                             <Slider
                                 x:Name="BrightnessSlider"
                                 Maximum="100"
                                 Minimum="0"
                                 StepFrequency="1"
                                 ValueChanged="OnBrightnessSliderChanged" />
-                        </StackPanel>
+                        </controls:SettingsCard>
 
-                        <ToggleSwitch
-                            x:Name="MultiMonitorToggle"
-                            Header="Control all displays (expandable flyout)"
-                            OffContent=""
-                            OnContent=""
-                            Toggled="OnMultiMonitorToggled" />
-                        <TextBlock
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            FontSize="12"
-                            Text="When enabled, the flyout gets an expand arrow with one slider per display and a synchronize button. Keyboard keys control the display whose slider you touched last."
-                            TextWrapping="Wrap" />
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="Default display (keyboard target at startup)" />
+                        <controls:SettingsCard
+                            Header="Default display"
+                            Description="Which display the keyboard controls at startup">
                             <ComboBox
                                 x:Name="DefaultMonitorComboBox"
                                 HorizontalAlignment="Stretch"
                                 SelectionChanged="OnDefaultMonitorChanged" />
-                        </StackPanel>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsExpander
+                            Margin="0,4,0,0"
+                            Header="Multiple displays"
+                            Description="Show every display on the flyout">
+                            <controls:SettingsExpander.Items>
+                                <controls:SettingsCard
+                                    Header="Per-display flyout"
+                                    Description="Adds an expand arrow to the flyout revealing one slider per display and a sync-all toggle">
+                                    <ToggleSwitch
+                                        x:Name="MultiMonitorToggle"
+                                        OffContent=""
+                                        OnContent=""
+                                        Toggled="OnMultiMonitorToggled" />
+                                </controls:SettingsCard>
+                            </controls:SettingsExpander.Items>
+                        </controls:SettingsExpander>
                     </StackPanel>
-                </Border>
 
-                <!-- Behavior -->
-                <Border
-                    Padding="16"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8">
-                    <StackPanel Spacing="12">
-                        <TextBlock FontWeight="SemiBold" Text="Behavior" />
+                    <!-- ==================== Flyout ==================== -->
+                    <StackPanel x:Name="PageFlyout" Visibility="Collapsed" Spacing="4">
+                        <TextBlock
+                            Margin="0,0,0,8"
+                            FontSize="20"
+                            FontWeight="SemiBold"
+                            Text="Flyout" />
 
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="Brightness step (%)" />
+                        <controls:SettingsCard Header="Theme" Description="Flyout and app appearance">
+                            <ComboBox x:Name="ThemeComboBox" SelectionChanged="OnThemeChanged">
+                                <ComboBoxItem Content="Use system setting" />
+                                <ComboBoxItem Content="Light" />
+                                <ComboBoxItem Content="Dark" />
+                            </ComboBox>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="Position" Description="Which display shows the flyout">
+                            <ComboBox x:Name="PlacementComboBox" SelectionChanged="OnPlacementChanged">
+                                <ComboBoxItem Content="Primary display" />
+                                <ComboBoxItem Content="All displays" />
+                            </ComboBox>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard
+                            Header="Show percentage"
+                            Description="Numeric readout next to the bar">
+                            <ToggleSwitch
+                                x:Name="PercentToggle"
+                                OffContent=""
+                                OnContent=""
+                                Toggled="OnPercentToggled" />
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard
+                            Header="Clickable bar"
+                            Description="Click or drag the flyout bar to set brightness directly">
+                            <ToggleSwitch
+                                x:Name="ClickableBarToggle"
+                                OffContent=""
+                                OnContent=""
+                                Toggled="OnClickableBarToggled" />
+                        </controls:SettingsCard>
+
+                        <controls:SettingsExpander
+                            Margin="0,4,0,0"
+                            Header="Colors"
+                            Description="Background and bar fill">
+                            <controls:SettingsExpander.Items>
+                                <controls:SettingsCard Header="Background">
+                                    <StackPanel MinWidth="260" Spacing="8">
+                                        <ComboBox
+                                            x:Name="BackgroundComboBox"
+                                            HorizontalAlignment="Stretch"
+                                            SelectionChanged="OnBackgroundStyleChanged">
+                                            <ComboBoxItem Content="Acrylic (system)" />
+                                            <ComboBoxItem Content="Custom color" />
+                                        </ComboBox>
+                                        <ColorPicker
+                                            x:Name="BackgroundColorPicker"
+                                            IsAlphaEnabled="True"
+                                            IsMoreButtonVisible="True"
+                                            Visibility="Collapsed"
+                                            ColorChanged="OnBackgroundColorChanged" />
+                                    </StackPanel>
+                                </controls:SettingsCard>
+                                <controls:SettingsCard Header="Bar fill">
+                                    <StackPanel MinWidth="260" Spacing="8">
+                                        <ComboBox
+                                            x:Name="FillComboBox"
+                                            HorizontalAlignment="Stretch"
+                                            SelectionChanged="OnFillStyleChanged">
+                                            <ComboBoxItem Content="System accent color" />
+                                            <ComboBoxItem Content="Custom color" />
+                                        </ComboBox>
+                                        <ColorPicker
+                                            x:Name="FillColorPicker"
+                                            IsMoreButtonVisible="True"
+                                            Visibility="Collapsed"
+                                            ColorChanged="OnFillColorChanged" />
+                                    </StackPanel>
+                                </controls:SettingsCard>
+                            </controls:SettingsExpander.Items>
+                        </controls:SettingsExpander>
+
+                        <Button
+                            x:Name="PreviewButton"
+                            Margin="0,8,0,0"
+                            HorizontalAlignment="Left"
+                            Click="OnPreviewClick"
+                            Content="Preview flyout" />
+                    </StackPanel>
+
+                    <!-- ==================== Keyboard ==================== -->
+                    <StackPanel x:Name="PageKeyboard" Visibility="Collapsed" Spacing="4">
+                        <TextBlock
+                            Margin="0,0,0,8"
+                            FontSize="20"
+                            FontWeight="SemiBold"
+                            Text="Keyboard" />
+
+                        <controls:SettingsCard
+                            Header="Standard brightness keys"
+                            Description="Recommended. Detects keyboards that report brightness as HID consumer-control usages - invisible to keyboard hooks - via Raw Input">
+                            <ToggleSwitch
+                                x:Name="RawInputToggle"
+                                OffContent=""
+                                OnContent=""
+                                Toggled="OnRawInputToggled" />
+                        </controls:SettingsCard>
+
+                        <controls:SettingsExpander
+                            Margin="0,4,0,0"
+                            Header="Advanced: low-level keyboard hook"
+                            Description="Only for keyboards whose brightness keys emit virtual-key codes. Matching presses are swallowed before Windows sees them.">
+                            <controls:SettingsExpander.Items>
+                                <controls:SettingsCard
+                                    Header="Brightness down"
+                                    Description="Virtual-key code, hex (0x…) or decimal">
+                                    <TextBox
+                                        x:Name="VkDownTextBox"
+                                        MinWidth="120"
+                                        PlaceholderText="0x9E"
+                                        TextChanged="OnVkTextChanged" />
+                                </controls:SettingsCard>
+                                <controls:SettingsCard
+                                    Header="Brightness up"
+                                    Description="Virtual-key code, hex (0x…) or decimal">
+                                    <TextBox
+                                        x:Name="VkUpTextBox"
+                                        MinWidth="120"
+                                        PlaceholderText="0x9F"
+                                        TextChanged="OnVkTextChanged" />
+                                </controls:SettingsCard>
+                            </controls:SettingsExpander.Items>
+                        </controls:SettingsExpander>
+
+                        <TextBlock
+                            Margin="4,12,0,0"
+                            FontSize="12"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Laptop note: Windows handles internal-panel brightness keys itself; those changes are mirrored into the flyout automatically."
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <!-- ==================== General ==================== -->
+                    <StackPanel x:Name="PageGeneral" Visibility="Collapsed" Spacing="4">
+                        <TextBlock
+                            Margin="0,0,0,8"
+                            FontSize="20"
+                            FontWeight="SemiBold"
+                            Text="General" />
+
+                        <controls:SettingsCard
+                            Header="Brightness step"
+                            Description="How much one key press changes brightness, in percent">
                             <NumberBox
                                 x:Name="StepNumberBox"
                                 Maximum="50"
@@ -118,10 +307,11 @@
                                 SmallChange="1"
                                 SpinButtonPlacementMode="Inline"
                                 ValueChanged="OnStepChanged" />
-                        </StackPanel>
+                        </controls:SettingsCard>
 
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="OSD visible time (seconds)" />
+                        <controls:SettingsCard
+                            Header="Flyout visible time"
+                            Description="Seconds before the flyout hides itself">
                             <NumberBox
                                 x:Name="DurationNumberBox"
                                 Maximum="10"
@@ -129,166 +319,19 @@
                                 SmallChange="0.5"
                                 SpinButtonPlacementMode="Inline"
                                 ValueChanged="OnDurationChanged" />
-                        </StackPanel>
+                        </controls:SettingsCard>
 
-                        <ToggleSwitch
-                            x:Name="StartupToggle"
-                            Header="Run at Windows startup"
-                            OffContent=""
-                            OnContent=""
-                            Toggled="OnStartupToggled" />
+                        <controls:SettingsCard Header="Run at Windows startup">
+                            <ToggleSwitch
+                                x:Name="StartupToggle"
+                                OffContent=""
+                                OnContent=""
+                                Toggled="OnStartupToggled" />
+                        </controls:SettingsCard>
                     </StackPanel>
-                </Border>
 
-                <!-- Appearance -->
-                <Border
-                    Padding="16"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8">
-                    <StackPanel Spacing="12">
-                        <TextBlock FontWeight="SemiBold" Text="Flyout appearance" />
-
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="Theme" />
-                            <ComboBox
-                                x:Name="ThemeComboBox"
-                                HorizontalAlignment="Stretch"
-                                SelectionChanged="OnThemeChanged">
-                                <ComboBoxItem Content="Use system setting" />
-                                <ComboBoxItem Content="Light" />
-                                <ComboBoxItem Content="Dark" />
-                            </ComboBox>
-                        </StackPanel>
-
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="Show flyout on" />
-                            <ComboBox
-                                x:Name="PlacementComboBox"
-                                HorizontalAlignment="Stretch"
-                                SelectionChanged="OnPlacementChanged">
-                                <ComboBoxItem Content="Primary display" />
-                                <ComboBoxItem Content="All displays" />
-                            </ComboBox>
-                        </StackPanel>
-
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="Background" />
-                            <ComboBox
-                                x:Name="BackgroundComboBox"
-                                HorizontalAlignment="Stretch"
-                                SelectionChanged="OnBackgroundStyleChanged">
-                                <ComboBoxItem Content="Acrylic (system)" />
-                                <ComboBoxItem Content="Custom color" />
-                            </ComboBox>
-                            <ColorPicker
-                                x:Name="BackgroundColorPicker"
-                                Margin="0,8,0,0"
-                                IsAlphaEnabled="True"
-                                IsMoreButtonVisible="True"
-                                Visibility="Collapsed"
-                                ColorChanged="OnBackgroundColorChanged" />
-                        </StackPanel>
-
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="Bar fill" />
-                            <ComboBox
-                                x:Name="FillComboBox"
-                                HorizontalAlignment="Stretch"
-                                SelectionChanged="OnFillStyleChanged">
-                                <ComboBoxItem Content="System accent color" />
-                                <ComboBoxItem Content="Custom color" />
-                            </ComboBox>
-                            <ColorPicker
-                                x:Name="FillColorPicker"
-                                Margin="0,8,0,0"
-                                IsMoreButtonVisible="True"
-                                Visibility="Collapsed"
-                                ColorChanged="OnFillColorChanged" />
-                        </StackPanel>
-
-                        <ToggleSwitch
-                            x:Name="PercentToggle"
-                            Header="Show percentage on the flyout"
-                            OffContent=""
-                            OnContent=""
-                            Toggled="OnPercentToggled" />
-
-                        <ToggleSwitch
-                            x:Name="ClickableBarToggle"
-                            Header="Flyout bar responds to clicks"
-                            OffContent=""
-                            OnContent=""
-                            Toggled="OnClickableBarToggled" />
-
-                        <Button
-                            x:Name="PreviewButton"
-                            HorizontalAlignment="Left"
-                            Click="OnPreviewClick"
-                            Content="Preview flyout" />
-                    </StackPanel>
-                </Border>
-
-                <!-- Input -->
-                <Border
-                    Padding="16"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8">
-                    <StackPanel Spacing="12">
-                        <TextBlock FontWeight="SemiBold" Text="Keyboard input" />
-
-                        <ToggleSwitch
-                            x:Name="RawInputToggle"
-                            Header="Listen for HID consumer brightness keys via Raw Input"
-                            OffContent=""
-                            OnContent=""
-                            Toggled="OnRawInputToggled" />
-                        <TextBlock
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            FontSize="12"
-                            Text="Recommended. Keyboards that report brightness as HID consumer-control usages are invisible to keyboard hooks; Raw Input is how those keys are detected."
-                            TextWrapping="Wrap" />
-
-                        <TextBlock Text="Low-level hook (WH_KEYBOARD_LL) virtual key codes:" />
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="4">
-                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Brightness down VK (hex)" />
-                                <TextBox
-                                    x:Name="VkDownTextBox"
-                                    PlaceholderText="0x9E"
-                                    TextChanged="OnVkTextChanged" />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Spacing="4">
-                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Brightness up VK (hex)" />
-                                <TextBox
-                                    x:Name="VkUpTextBox"
-                                    PlaceholderText="0x9F"
-                                    TextChanged="OnVkTextChanged" />
-                            </StackPanel>
-                        </Grid>
-                        <TextBlock
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            FontSize="12"
-                            Text="Only needed if your keyboard emits actual virtual key codes for brightness. Matching key presses are swallowed before the shell sees them."
-                            TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
-
-                <TextBlock
-                    Margin="0,8,0,0"
-                    HorizontalAlignment="Center"
-                    FontSize="12"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="{x:Bind VersionText}" />
-
-            </StackPanel>
-        </ScrollViewer>
+                </StackPanel>
+            </ScrollViewer>
+        </NavigationView>
     </Grid>
 </Window>

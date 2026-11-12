@@ -19,8 +19,11 @@ built-in one.
   Settings also has an explicit refresh button.
 - **Laptop support**: on mobile systems Windows consumes the brightness keys itself;
   a `WmiMonitorBrightnessEvent` watcher mirrors those changes into our OSD (and to
-  all included displays when sync is on). Displays that answer neither DDC/CI nor
-  WMI (phantom "Generic PnP" entries) are filtered out.
+  all included displays when sync is on). If the internal panel is **excluded** from
+  control, Windows' own changes to it are reverted (debounced per key-press burst)
+  and the keys drive your other displays instead.
+- **Clickable flyout bar** (on by default): click or drag the collapsed bar to set
+  brightness directly; per-display sliders are disabled while sync is on.
 - **Windows 10**: icon fonts fall back to Segoe MDL2 Assets, and the native OSD is
   suppressed via the legacy `NativeHWNDHost` host window.
 - **Keyboard input detection**, two complementary paths:
@@ -39,10 +42,13 @@ built-in one.
   always restored on timeout and on app exit. Volume OSD etc. are unaffected
   outside that window.
 - **System tray** with Settings / Exit context menu.
-- **Settings window**: brightness step, OSD duration, run-at-startup, theme
-  (System/Light/Dark), flyout background (acrylic or custom color), bar fill
-  (system accent or custom color), raw-input toggle and hook VK codes.
-  Persisted to `%LOCALAPPDATA%\BrightFlyout\settings.json`.
+- **Settings window**: four NavigationView pages (Displays / Flyout / Keyboard /
+  General) built with CommunityToolkit SettingsControls - display inclusion and
+  default target, theme (System/Light/Dark), flyout background (acrylic or custom
+  color), bar fill (system accent or custom color), percentage readout, clickable
+  bar, brightness step, OSD duration, run-at-startup, and the keyboard input
+  options (HID Raw Input on by default; low-level hook VK codes behind an
+  "Advanced" expander). Persisted to `%LOCALAPPDATA%\BrightFlyout\settings.json`.
 
 ## Build & run
 
