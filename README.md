@@ -10,6 +10,12 @@ replaces the plain built-in popup with its own Windows-11-style flyout.
 
 ![BrightFlyout flyout](docs/screenshots/osd-collapsed.png)
 
+> [!WARNING]
+> This is a fully **vibecoded** project — written end-to-end by an AI pair
+> programmer with minimal human review. It is provided **as is**, without
+> warranty of any kind; no responsibility is taken for any damage, data loss,
+> or misbehaving monitors. Use at your own risk.
+
 ## What it does
 
 - **External monitor brightness from the keyboard.** Sends DDC/CI commands
