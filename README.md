@@ -44,15 +44,41 @@ built-in one.
 
 ## Build & run
 
-Requires: .NET 10 SDK, Windows App SDK 2.6 runtime (debug builds).
+### Development inner loop
+
+Day-to-day development does **not** need the MSIX machinery (packaging, signing,
+AOT) - that is for releases only. Use the dev script:
 
 ```powershell
-dotnet build -c Debug -p:Platform=x64 -r win-x64
-.\bin\x64\Debug\net10.0-windows10.0.19041.0\win-x64\BrightFlyout.exe
+.\tools\dev-run.ps1                    # kill running instance, Debug build, launch
+.\tools\dev-run.ps1 -Release           # optimized JIT build instead (still seconds)
+.\tools\dev-run.ps1 -OpenSettings      # launch straight into the settings window
+.\tools\dev-run.ps1 -NoLaunch          # just build
 ```
 
-The app lives in the system tray (sun icon). Right-click → **Settings**,
-double-click opens Settings directly.
+Plain `dotnet` equivalent: `dotnet build -c Debug -p:Platform=x64 -r win-x64`,
+exe lands in `bin\x64\Debug\net10.0-windows10.0.19041.0\win-x64\`.
+
+Requires: .NET 10 SDK, and the **Windows App SDK 2.6 runtime** installed once
+(unpackaged dev builds bootstrap against it). If the app fails to start with a
+missing-runtime error, either install any released MSIX once (it pulls the
+runtime from the Store) or run `windowsappruntimeinstall-x64.exe` from the
+[Windows App SDK downloads](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads).
+
+Other dev affordances:
+
+- Diagnostics go to `%LOCALAPPDATA%\BrightFlyout\debug.log` (bounded, 256 KB).
+- `BrightFlyout.exe --open-settings` opens the settings window at startup
+  (test hook; also works on installed MSIX builds via their exe path).
+- The app lives in the system tray (sun icon). Right-click → **Settings**,
+  double-click opens Settings directly.
+
+### Release builds
+
+The two MSIX variants and their sizes are listed under
+[Distribution](#distribution). When publishing both variants locally, wipe
+`bin`/`obj` between them - switching `PublishAot` on shared intermediates has
+produced corrupted packages.
 
 ## Distribution
 

@@ -17,6 +17,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <!-- English-only by design (no .resw, all UI strings are literals), so no
+         satellite assemblies. NOTE: InvariantGlobalization was tried and
+         reverted - the NativeAOT build silently dies under it (XAML framework
+         depends on the culture machinery). -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <!-- MSIX packaging: framework-dependent Windows App SDK (the Microsoft.WindowsAppRuntime.2
@@ -69,7 +74,7 @@
   <!-- NativeAOT size tuning: optimize for size, fold identical method bodies,
        drop debugger support. Deliberately NOT set: UseSystemResourceKeys and
        StackTraceSupport=false (would ruin the exception messages/stack traces
-       in debug.log), EventSourceSupport, InvariantGlobalization (pl-PL host). -->
+       in debug.log) and EventSourceSupport (keep diagnostics channels). -->
   <PropertyGroup Condition="'$(PublishAot)' == 'true'">
     <IlcOptimizationPreference>Size</IlcOptimizationPreference>
     <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>

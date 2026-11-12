@@ -40,7 +40,7 @@ public partial class App : Application
         _singleInstanceMutex = new Mutex(initiallyOwned: true, "BrightFlyout.SingleInstance", out bool createdNew);
         if (!createdNew)
         {
-            // Another instance is already running; exit quietly.
+            Log("Another instance is already running; exiting (single-instance mutex)");
             Environment.Exit(0);
             return;
         }
