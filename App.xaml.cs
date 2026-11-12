@@ -1,8 +1,15 @@
-using BrightFlyout.Native;
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using BrightFlyout.Services;
 using BrightFlyout.Views;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace BrightFlyout;
 
@@ -41,6 +48,7 @@ public partial class App : Application
         if (!createdNew)
         {
             Log("Another instance is already running; exiting (single-instance mutex)");
+            Services.Log.Flush();
             Environment.Exit(0);
             return;
         }
@@ -82,6 +90,13 @@ public partial class App : Application
         Osd.BindDisplays(Controller.Displays);
         Controller.Start();
 
+        // Diagnostics: prove the WMI path works (usable on machines without
+        // an internal panel too).
+        if (Environment.GetEnvironmentVariable("BRIGHTFLYOUT_WMI_SELFTEST") is { Length: > 0 })
+        {
+            Task.Run(Services.Displays.WmiDisplayController.SelfTest);
+        }
+
         // WinUI 3 doesn't track OS theme switches for ElementTheme.Default at
         // runtime - push explicit themes to all windows ourselves.
         _themeService = new ThemeService(Settings);
@@ -101,7 +116,7 @@ public partial class App : Application
         }
     }
 
-    private static IntPtr LoadTrayIcon()
+    private static unsafe HICON LoadTrayIcon()
     {
         // The ico is an embedded resource (single-file safe); LoadImage needs a
         // file, so extract it to %TEMP% once.
@@ -114,11 +129,17 @@ public partial class App : Application
             stream.CopyTo(file);
         }
 
-        var hIcon = NativeMethods.LoadImageW(IntPtr.Zero, icoPath, NativeMethods.IMAGE_ICON,
-            NativeMethods.GetSystemMetrics(NativeMethods.SM_CXSMICON),
-            NativeMethods.GetSystemMetrics(NativeMethods.SM_CYSMICON),
-            NativeMethods.LR_LOADFROMFILE);
-        return hIcon != IntPtr.Zero
+        HICON hIcon;
+        fixed (char* pathPtr = icoPath)
+        {
+            var handle = PInvoke.LoadImage(default, new PCWSTR(pathPtr), GDI_IMAGE_TYPE.IMAGE_ICON,
+                PInvoke.GetSystemMetrics(SYSTEM_METRICS_INDEX.SM_CXSMICON),
+                PInvoke.GetSystemMetrics(SYSTEM_METRICS_INDEX.SM_CYSMICON),
+                IMAGE_FLAGS.LR_LOADFROMFILE);
+            hIcon = new HICON(handle.Value);
+        }
+
+        return !hIcon.IsNull
             ? hIcon
             : throw new InvalidOperationException(
                 $"LoadImage failed, win32={System.Runtime.InteropServices.Marshal.GetLastWin32Error()}");
@@ -167,6 +188,7 @@ public partial class App : Application
         _settingsWindow?.Close();
         _singleInstanceMutex?.ReleaseMutex();
         _singleInstanceMutex?.Dispose();
+        Services.Log.Flush();
         Environment.Exit(0);
     }
 }

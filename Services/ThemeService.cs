@@ -1,10 +1,13 @@
+using System;
 using System.ComponentModel;
-using BrightFlyout.Native;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Windows.UI;
 using Windows.UI.ViewManagement;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Dwm;
 
 namespace BrightFlyout.Services;
 
@@ -68,11 +71,11 @@ public sealed class ThemeService
     }
 
     /// <summary>Applies immersive dark mode to the window frame (non-client area).</summary>
-    public static void ApplyDarkModeFrame(IntPtr hwnd, bool isDark)
+    public static unsafe void ApplyDarkModeFrame(IntPtr hwnd, bool isDark)
     {
-        int useDark = isDark ? 1 : 0;
-        NativeMethods.DwmSetWindowAttribute(
-            hwnd, NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
+        var useDark = isDark ? 1 : 0;
+        PInvoke.DwmSetWindowAttribute(
+            new HWND(hwnd), DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE, &useDark, sizeof(int));
     }
 
     /// <summary>

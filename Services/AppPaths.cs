@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+
 namespace BrightFlyout.Services;
 
 /// <summary>Canonical file system locations used by the app.</summary>

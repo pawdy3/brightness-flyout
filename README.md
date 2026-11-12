@@ -100,6 +100,7 @@ Test hooks (environment variables, honored at startup):
 |---|---|
 | `BRIGHTFLYOUT_SIMULATE_DISPLAYS` | two in-memory displays replace hardware enumeration; no DDC/CI or WMI calls |
 | `BRIGHTFLYOUT_APPDATA` | redirects settings.json/debug.log to the given directory |
+| `BRIGHTFLYOUT_WMI_SELFTEST` | runs a WMI connectivity self-test at startup (works on machines without an internal panel) |
 
 Exit code is non-zero if any test fails; on failure the isolated app-data
 directory is kept at `%TEMP%\BrightFlyoutIntegrationTests` for inspection.
@@ -118,15 +119,14 @@ and attaches them to a GitHub Release when a `v*` tag is pushed:
 
 | Artifact | Size | Contains |
 |---|---|---|
-| `BrightFlyout_AOT_x64.msix` | ~3.8 MB | NativeAOT exe only — but the WMI path (internal laptop panels) is not AOT-clean and may misbehave |
-| `BrightFlyout_Hybrid_x64.msix` | ~10 MB | regular build + trimmed .NET 10 runtime (reliable WMI; System.Management is kept untrimmed) |
+| `BrightFlyout_AOT_x64.msix` | ~5 MB | NativeAOT exe only — full feature set, including internal laptop panels (WMI via WmiLight, which is AOT-compatible) |
+| `BrightFlyout_Hybrid_x64.msix` | ~10 MB | regular build + trimmed .NET 10 runtime (fallback variant) |
 
 Both pull the Windows App SDK 2.6 automatically as a framework package from the
 Microsoft Store during install (one-time, needs network + Store access), and
 both are proper installers: Start Menu entry, Settings > Apps uninstall, and
 in-place upgrades (installing a newer `.msix` upgrades the app and keeps
-settings). Pick AOT for the tiny package; pick hybrid if internal laptop panel
-(WMI) control matters to you.
+settings). Pick AOT; the hybrid variant exists as a fallback.
 
 ### Installing / upgrading
 

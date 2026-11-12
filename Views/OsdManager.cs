@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using BrightFlyout.Services;
 using BrightFlyout.Services.Displays;
 using Microsoft.UI.Windowing;
@@ -28,7 +31,7 @@ public sealed class OsdManager
     }
 
     /// <summary>HWND of the first OSD window (raw-input message target).</summary>
-    public IntPtr Hwnd => _windows[0].Hwnd;
+    internal Windows.Win32.Foundation.HWND Hwnd => _windows[0].Hwnd;
 
     /// <summary>DispatcherQueue of the first OSD window.</summary>
     public Microsoft.UI.Dispatching.DispatcherQueue DispatcherQueue => _windows[0].DispatcherQueue;
@@ -125,11 +128,13 @@ public sealed class OsdManager
         }
     }
 
-    private static Windows.Graphics.RectInt32 GetPrimaryWorkArea()
+    private static unsafe Windows.Graphics.RectInt32 GetPrimaryWorkArea()
     {
-        Native.NativeMethods.SystemParametersInfoW(
-            Native.NativeMethods.SPI_GETWORKAREA, 0, out var workArea, 0);
+        Windows.Win32.Foundation.RECT workArea;
+        Windows.Win32.PInvoke.SystemParametersInfo(
+            Windows.Win32.UI.WindowsAndMessaging.SYSTEM_PARAMETERS_INFO_ACTION.SPI_GETWORKAREA,
+            0, &workArea, default);
         return new Windows.Graphics.RectInt32(
-            workArea.Left, workArea.Top, workArea.Width, workArea.Height);
+            workArea.left, workArea.top, workArea.right - workArea.left, workArea.bottom - workArea.top);
     }
 }

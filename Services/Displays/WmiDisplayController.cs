@@ -1,14 +1,20 @@
-#if BRIGHTFLYOUT_WMI
-using System.Management;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using WmiLight;
 
 namespace BrightFlyout.Services.Displays;
 
 /// <summary>
 /// Internal laptop panel controlled through WMI (root\wmi: WmiMonitorBrightness /
-/// WmiMonitorBrightnessMethods). Used for displays that don't speak DDC/CI.
+/// WmiMonitorBrightnessMethods) via WmiLight (NativeAOT-compatible, unlike
+/// System.Management). Used for displays that don't speak DDC/CI.
 /// </summary>
 internal sealed class WmiDisplayController : IDisplayController
 {
+    private const string RootWmi = @"root\wmi";
+
     private readonly string _instanceName;
 
     public WmiDisplayController(string instanceName)
@@ -22,18 +28,26 @@ internal sealed class WmiDisplayController : IDisplayController
     public bool IsAvailable { get; private set; } = true;
     public int? CurrentBrightness { get; private set; }
 
+    // WBEM_E_NOT_SUPPORTED / WBEM_E_INVALID_CLASS: WmiMonitorBrightness simply does
+    // not exist on machines without an internal panel (desktops) - not an error.
+    private const int WbemENotSupported = unchecked((int)0x8004100C);
+    private const int WbemEInvalidClass = unchecked((int)0x80041010);
+
     /// <summary>Enumerates all internal panels that expose WMI brightness control.</summary>
     public static List<string> EnumerateInstanceNames()
     {
         try
         {
-            using var searcher = new ManagementObjectSearcher(
-                @"root\wmi", "SELECT InstanceName FROM WmiMonitorBrightness");
-            return searcher.Get()
-                .Cast<ManagementObject>()
+            using var connection = new WmiConnection(RootWmi);
+            return connection.CreateQuery("SELECT InstanceName FROM WmiMonitorBrightness")
                 .Select(o => o["InstanceName"]?.ToString() ?? string.Empty)
                 .Where(n => n.Length > 0)
                 .ToList();
+        }
+        catch (System.Runtime.InteropServices.COMException ex)
+            when (ex.HResult is WbemENotSupported or WbemEInvalidClass)
+        {
+            return [];
         }
         catch (Exception ex)
         {
@@ -46,11 +60,9 @@ internal sealed class WmiDisplayController : IDisplayController
     {
         try
         {
-            using var searcher = new ManagementObjectSearcher(
-                @"root\wmi",
-                $"SELECT CurrentBrightness FROM WmiMonitorBrightness WHERE InstanceName = '{EscapeWql(_instanceName)}'");
-            var brightness = searcher.Get()
-                .Cast<ManagementObject>()
+            using var connection = new WmiConnection(RootWmi);
+            var brightness = connection.CreateQuery(
+                    $"SELECT CurrentBrightness FROM WmiMonitorBrightness WHERE InstanceName = '{EscapeWmi(_instanceName)}'")
                 .Select(o => Convert.ToInt32(o["CurrentBrightness"]))
                 .FirstOrDefault(-1);
 
@@ -81,13 +93,23 @@ internal sealed class WmiDisplayController : IDisplayController
         {
             try
             {
-                using var searcher = new ManagementObjectSearcher(
-                    @"root\wmi",
-                    $"SELECT * FROM WmiMonitorBrightnessMethods WHERE InstanceName = '{EscapeWql(_instanceName)}'");
-                var methods = searcher.Get().Cast<ManagementObject>().FirstOrDefault();
+                using var connection = new WmiConnection(RootWmi);
+                var methods = connection.CreateQuery(
+                        $"SELECT * FROM WmiMonitorBrightnessMethods WHERE InstanceName = '{EscapeWmi(_instanceName)}'")
+                    .FirstOrDefault();
+                if (methods is null)
+                {
+                    IsAvailable = false;
+                    return;
+                }
+
                 // WmiSetBrightness(timeoutSeconds, brightnessPercent)
-                methods?.InvokeMethod("WmiSetBrightness", new object[] { (uint)1, (byte)percent });
-                IsAvailable = methods is not null;
+                using var method = methods.GetMethod("WmiSetBrightness");
+                using var parameters = method.CreateInParameters();
+                parameters.SetPropertyValue("Timeout", (uint)1);
+                parameters.SetPropertyValue("Brightness", (byte)percent);
+                methods.ExecuteMethod<uint>(method, parameters, out _);
+                IsAvailable = true;
             }
             catch
             {
@@ -96,31 +118,25 @@ internal sealed class WmiDisplayController : IDisplayController
         });
     }
 
-    private static string EscapeWql(string value) => value.Replace("\\", "\\\\").Replace("'", "\\'");
-}
-#else
-namespace BrightFlyout.Services.Displays;
-
-/// <summary>AOT build stub. System.Management requires built-in COM interop, which
-/// NativeAOT does not support - AOT packages report no internal panels.</summary>
-internal sealed class WmiDisplayController : IDisplayController
-{
-    public WmiDisplayController(string instanceName)
+    /// <summary>Diagnostic hook (BRIGHTFLYOUT_WMI_SELFTEST): proves the WMI path
+    /// works on any machine, even without an internal panel.</summary>
+    public static void SelfTest()
     {
+        try
+        {
+            Log.Write($"WMI self-test: {EnumerateInstanceNames().Count} brightness instance(s)");
+
+            using var connection = new WmiConnection(); // default namespace: root\cimv2
+            var caption = connection.CreateQuery("SELECT Caption FROM Win32_OperatingSystem")
+                .Select(o => o["Caption"]?.ToString())
+                .FirstOrDefault();
+            Log.Write($"WMI self-test: OS caption query -> '{caption ?? "(null)"}'");
+        }
+        catch (Exception ex)
+        {
+            Log.Write("WMI self-test failed", ex);
+        }
     }
 
-    public string Id => "wmi|unsupported";
-    public string Name => "Internal display";
-    public string Technology => "WMI (internal panel)";
-    public bool IsAvailable => false;
-    public int? CurrentBrightness => null;
-
-    public static List<string> EnumerateInstanceNames() => [];
-
-    public Task<int?> RefreshBrightnessAsync() => Task.FromResult<int?>(null);
-
-    public void SetBrightness(int percent)
-    {
-    }
+    private static string EscapeWmi(string value) => value.Replace("\\", "\\\\").Replace("'", "\\'");
 }
-#endif

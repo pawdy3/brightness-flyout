@@ -1,4 +1,11 @@
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using BrightFlyout.Native;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.Shell;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace BrightFlyout.Services;
 
@@ -6,29 +13,28 @@ namespace BrightFlyout.Services;
 /// Minimal, dependency-free tray icon: a message-only window + Shell_NotifyIcon
 /// (uID-based registration, no GUID table involvement) + a native popup menu.
 /// </summary>
-internal sealed class TrayIconService : IDisposable
+internal sealed unsafe class TrayIconService : IDisposable
 {
     private const int TrayIconId = 1;
-    private static readonly int WmTrayIcon = NativeMethods.WM_USER + 1;
+    private static readonly uint WmTrayIcon = PInvoke.WM_USER + 1;
 
     private const int CmdSettings = 1;
     private const int CmdExit = 2;
 
-    // One instance per process; the WndProc must stay rooted while the window lives.
+    // One instance per process; the (unmanaged) WndProc cannot capture state.
     private static TrayIconService? _instance;
-    private static NativeMethods.WndProc? _wndProcDelegate;
     private static ushort _classAtom;
     private static uint _wmTaskbarCreated;
 
-    private readonly IntPtr _hwnd;
-    private readonly IntPtr _hIcon;
+    private readonly HWND _hwnd;
+    private readonly HICON _hIcon;
     private string _tooltip;
     private bool _iconAdded;
 
     public event Action? SettingsRequested;
     public event Action? ExitRequested;
 
-    public TrayIconService(string tooltip, IntPtr hIcon)
+    public TrayIconService(string tooltip, HICON hIcon)
     {
         _tooltip = tooltip;
         _hIcon = hIcon;
@@ -43,7 +49,7 @@ internal sealed class TrayIconService : IDisposable
         _tooltip = tooltip;
         if (_iconAdded)
         {
-            Modify(NativeMethods.NIF_TIP);
+            Modify(NOTIFY_ICON_DATA_FLAGS.NIF_TIP);
         }
     }
 
@@ -55,51 +61,49 @@ internal sealed class TrayIconService : IDisposable
             return;
         }
 
-        var data = CreateData(NativeMethods.NIF_INFO);
-        data.szInfoTitle = title;
-        data.szInfo = text;
-        data.dwInfoFlags = NativeMethods.NIIF_INFO;
-        NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_MODIFY, ref data);
+        var data = CreateData(NOTIFY_ICON_DATA_FLAGS.NIF_INFO);
+        Win32.WriteFixedString(data.szInfoTitle.AsSpan(), title);
+        Win32.WriteFixedString(data.szInfo.AsSpan(), text);
+        data.dwInfoFlags = NOTIFY_ICON_INFOTIP_FLAGS.NIIF_INFO;
+        PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_MODIFY, in data);
     }
 
     #region Shell_NotifyIcon plumbing
 
-    private NativeMethods.NOTIFYICONDATAW CreateData(int flags)
+    private NOTIFYICONDATAW CreateData(NOTIFY_ICON_DATA_FLAGS flags)
     {
-        var data = new NativeMethods.NOTIFYICONDATAW
+        var data = new NOTIFYICONDATAW
         {
-            cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.NOTIFYICONDATAW>(),
+            cbSize = (uint)Marshal.SizeOf<NOTIFYICONDATAW>(),
             hWnd = _hwnd,
             uID = TrayIconId,
             uFlags = flags,
             uCallbackMessage = WmTrayIcon,
             hIcon = _hIcon,
-            szTip = _tooltip,
-            szInfo = string.Empty,
-            szInfoTitle = string.Empty,
         };
+        Win32.WriteFixedString(data.szTip.AsSpan(), _tooltip);
         return data;
     }
 
     private void AddIcon()
     {
-        var data = CreateData(NativeMethods.NIF_MESSAGE | NativeMethods.NIF_ICON | NativeMethods.NIF_TIP);
-        if (NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_ADD, ref data))
+        var data = CreateData(NOTIFY_ICON_DATA_FLAGS.NIF_MESSAGE | NOTIFY_ICON_DATA_FLAGS.NIF_ICON | NOTIFY_ICON_DATA_FLAGS.NIF_TIP);
+        if (PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_ADD, in data))
         {
             data.uVersion = 4; // NOTIFYICON_VERSION_4
-            NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_SETVERSION, ref data);
+            PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_SETVERSION, in data);
             _iconAdded = true;
         }
         else
         {
-            Log.Write($"Shell_NotifyIcon(NIM_ADD) failed, win32={System.Runtime.InteropServices.Marshal.GetLastWin32Error()}");
+            Log.Write($"Shell_NotifyIcon(NIM_ADD) failed, win32={Marshal.GetLastWin32Error()}");
         }
     }
 
-    private void Modify(int flags)
+    private void Modify(NOTIFY_ICON_DATA_FLAGS flags)
     {
         var data = CreateData(flags);
-        NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_MODIFY, ref data);
+        PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_MODIFY, in data);
     }
 
     private void RemoveIcon()
@@ -110,7 +114,7 @@ internal sealed class TrayIconService : IDisposable
         }
 
         var data = CreateData(0);
-        NativeMethods.Shell_NotifyIconW(NativeMethods.NIM_DELETE, ref data);
+        PInvoke.Shell_NotifyIcon(NOTIFY_ICON_MESSAGE.NIM_DELETE, in data);
         _iconAdded = false;
     }
 
@@ -118,68 +122,77 @@ internal sealed class TrayIconService : IDisposable
 
     #region Message window
 
-    private IntPtr CreateMessageWindow()
+    private HWND CreateMessageWindow()
     {
         const string className = "BrightFlyoutTrayWindow";
 
         if (_classAtom == 0)
         {
-            _wndProcDelegate = StaticWndProc;
-            _wmTaskbarCreated = NativeMethods.RegisterWindowMessageW("TaskbarCreated");
+            _wmTaskbarCreated = PInvoke.RegisterWindowMessage("TaskbarCreated");
+            var hInstance = new HINSTANCE(PInvoke.GetModuleHandle(default(PCWSTR)).Value);
 
-            var wc = new NativeMethods.WNDCLASSEXW
+            fixed (char* classNamePtr = className)
             {
-                cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.WNDCLASSEXW>(),
-                lpfnWndProc = System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_wndProcDelegate),
-                hInstance = NativeMethods.GetModuleHandleW(null),
-                lpszClassName = className,
-            };
+                var wc = new WNDCLASSEXW
+                {
+                    cbSize = (uint)Marshal.SizeOf<WNDCLASSEXW>(),
+                    lpfnWndProc = &StaticWndProc,
+                    hInstance = hInstance,
+                    lpszClassName = new PCWSTR(classNamePtr),
+                };
 
-            _classAtom = NativeMethods.RegisterClassExW(ref wc);
+                _classAtom = PInvoke.RegisterClassEx(wc);
+            }
+
             if (_classAtom == 0)
             {
-                Log.Write($"RegisterClassEx failed, win32={System.Runtime.InteropServices.Marshal.GetLastWin32Error()}");
+                Log.Write($"RegisterClassEx failed, win32={Marshal.GetLastWin32Error()}");
             }
         }
 
-        var hwnd = NativeMethods.CreateWindowExW(0, className, className, 0, 0, 0, 0, 0,
-            NativeMethods.HWND_MESSAGE, IntPtr.Zero, NativeMethods.GetModuleHandleW(null), IntPtr.Zero);
-        if (hwnd == IntPtr.Zero)
+        HWND hwnd;
+        fixed (char* classNamePtr = className)
         {
-            Log.Write($"Tray message window creation failed, win32={System.Runtime.InteropServices.Marshal.GetLastWin32Error()}");
+            hwnd = PInvoke.CreateWindowEx(0, new PCWSTR(classNamePtr), new PCWSTR(classNamePtr), 0, 0, 0, 0, 0,
+                HWND.HWND_MESSAGE, default, PInvoke.GetModuleHandle(default(PCWSTR)), null);
+        }
+        if (hwnd.IsNull)
+        {
+            Log.Write($"Tray message window creation failed, win32={Marshal.GetLastWin32Error()}");
         }
 
         return hwnd;
     }
 
-    private static IntPtr StaticWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static LRESULT StaticWndProc(HWND hWnd, uint msg, WPARAM wParam, LPARAM lParam)
     {
         if (msg == WmTrayIcon)
         {
             // With NOTIFYICON_VERSION_4, lParam = LOWORD(mouse message) +
             // HIWORD(icon id) - mask off the icon id.
-            _instance?.OnTrayMessage((int)(lParam.ToInt64() & 0xFFFF));
-            return IntPtr.Zero;
+            _instance?.OnTrayMessage((int)(lParam.Value & 0xFFFF));
+            return (LRESULT)0;
         }
 
         if (msg == _wmTaskbarCreated && _wmTaskbarCreated != 0)
         {
             // Explorer restarted: re-register the icon.
             _instance?.AddIcon();
-            return IntPtr.Zero;
+            return (LRESULT)0;
         }
 
-        return NativeMethods.DefWindowProcW(hWnd, msg, wParam, lParam);
+        return PInvoke.DefWindowProc(hWnd, msg, wParam, lParam);
     }
 
     private void OnTrayMessage(int mouseMessage)
     {
-        switch (mouseMessage)
+        switch ((uint)mouseMessage)
         {
-            case NativeMethods.WM_LBUTTONDBLCLK:
+            case PInvoke.WM_LBUTTONDBLCLK:
                 SettingsRequested?.Invoke();
                 break;
-            case NativeMethods.WM_RBUTTONUP:
+            case PInvoke.WM_RBUTTONUP:
                 ShowContextMenu();
                 break;
         }
@@ -187,25 +200,34 @@ internal sealed class TrayIconService : IDisposable
 
     private void ShowContextMenu()
     {
-        var menu = NativeMethods.CreatePopupMenu();
-        if (menu == IntPtr.Zero)
+        var menu = PInvoke.CreatePopupMenu();
+        if (menu.IsNull)
         {
             return;
         }
 
-        NativeMethods.AppendMenuW(menu, NativeMethods.MF_STRING, (UIntPtr)CmdSettings, "Settings");
-        NativeMethods.AppendMenuW(menu, NativeMethods.MF_SEPARATOR, UIntPtr.Zero, null);
-        NativeMethods.AppendMenuW(menu, NativeMethods.MF_STRING, (UIntPtr)CmdExit, "Exit");
+        AppendMenuText(menu, MENU_ITEM_FLAGS.MF_STRING, CmdSettings, "Settings");
+        AppendMenuText(menu, MENU_ITEM_FLAGS.MF_SEPARATOR, 0, null);
+        AppendMenuText(menu, MENU_ITEM_FLAGS.MF_STRING, CmdExit, "Exit");
 
         // Required ritual for popup menus owned by message-only windows.
-        NativeMethods.SetForegroundWindow(_hwnd);
-        NativeMethods.GetCursorPos(out var cursor);
-        int command = NativeMethods.TrackPopupMenu(menu,
-            NativeMethods.TPM_RETURNCMD | NativeMethods.TPM_NONOTIFY | NativeMethods.TPM_RIGHTBUTTON,
-            cursor.X, cursor.Y, 0, _hwnd, IntPtr.Zero);
-        NativeMethods.PostMessageW(_hwnd, NativeMethods.WM_NULL, IntPtr.Zero, IntPtr.Zero);
+        PInvoke.SetForegroundWindow(_hwnd);
+        PInvoke.GetCursorPos(out var cursor);
+        var command = PInvoke.TrackPopupMenu(menu,
+            TRACK_POPUP_MENU_FLAGS.TPM_RETURNCMD | TRACK_POPUP_MENU_FLAGS.TPM_NONOTIFY | TRACK_POPUP_MENU_FLAGS.TPM_RIGHTBUTTON,
+            cursor.X, cursor.Y, 0, _hwnd, null);
+        PInvoke.PostMessage(_hwnd, PInvoke.WM_NULL, default, default);
+        PInvoke.DestroyMenu(menu);
 
-        OnMenuCommand(command);
+        OnMenuCommand(command.Value);
+    }
+
+    private static void AppendMenuText(HMENU menu, MENU_ITEM_FLAGS flags, nuint id, string? text)
+    {
+        fixed (char* textPtr = text)
+        {
+            PInvoke.AppendMenu(menu, flags, id, new PCWSTR(textPtr));
+        }
     }
 
     private void OnMenuCommand(int command)
@@ -227,12 +249,12 @@ internal sealed class TrayIconService : IDisposable
     {
         RemoveIcon();
 
-        if (_hwnd != IntPtr.Zero)
+        if (!_hwnd.IsNull)
         {
-            NativeMethods.DestroyWindow(_hwnd);
+            PInvoke.DestroyWindow(_hwnd);
         }
 
-        NativeMethods.DestroyIcon(_hIcon);
+        PInvoke.DestroyIcon(_hIcon);
         _instance = null;
     }
 }

@@ -6,7 +6,7 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>BrightFlyout</RootNamespace>
     <AssemblyName>BrightFlyout</AssemblyName>
-    <Version>1.0.5</Version>
+    <Version>2.0.0</Version>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
@@ -15,24 +15,25 @@
     <!-- Unpackaged by default; pass -p:BuildMSIX=true for a packaged (MSIX) build. -->
     <WindowsPackageType Condition="'$(BuildMSIX)' != 'true'">None</WindowsPackageType>
     <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <!-- English-only by design (no .resw, all UI strings are literals), so no
          satellite assemblies. InvariantGlobalization is NOT an option: the XAML
          framework resolves the host culture when a window is first shown and
          throws CultureNotFoundException under invariant mode. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- CsWin32 runs as a build task so its COM output can use the COM source
+         generators ([GeneratedComInterface]) - required for NativeAOT.
+         CsWin32PlatformTarget: NOTIFYICONDATAW & co. are arch-specific structs. -->
+    <CsWin32RunAsBuildTask>true</CsWin32RunAsBuildTask>
+    <CsWin32PlatformTarget>x64</CsWin32PlatformTarget>
+    <!-- DisableRuntimeMarshalling is declared in Native\AssemblyInfo.cs instead of via
+         the MSBuild property so CsWin32's build-task generation pass sees it too. -->
   </PropertyGroup>
 
-  <!-- WMI (internal laptop panels) via System.Management: unavailable under
-       NativeAOT, which cannot do the built-in COM interop System.Management is
-       built on (the compiler keeps it out of the AOT graph entirely - the WMI
-       classes compile to stubs, see WmiDisplayController.cs). For trimmed JIT
-       builds, trimming would also disable built-in COM, so re-enable it there. -->
-  <PropertyGroup Condition="'$(PublishAot)' != 'true'">
-    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-    <DefineConstants>$(DefineConstants);BRIGHTFLYOUT_WMI</DefineConstants>
-  </PropertyGroup>
+  <!-- WMI (internal laptop panels) via WmiLight, which is NativeAOT-compatible
+       (unlike System.Management, which needs built-in COM interop). WmiLight is
+       linked statically into AOT builds so the package stays a single exe. -->
 
   <!-- MSIX packaging: framework-dependent Windows App SDK (the Microsoft.WindowsAppRuntime.2
        package dependency is injected automatically and pulled from the Store at install). -->
@@ -65,22 +66,18 @@
     <EmbeddedResource Include="Assets\app.ico" LogicalName="BrightFlyout.app.ico" />
   </ItemGroup>
 
-  <!-- System.Management's static initializers use reflection-based delegate
-       loading that trimming breaks (REGDB/TypeInitializationException at
-       runtime). Root the assembly whole so the WMI path survives trimming.
-       (JIT builds only - AOT excludes System.Management entirely.) -->
-  <ItemGroup Condition="'$(PublishAot)' != 'true'">
-    <TrimmerRootAssembly Include="System.Management" />
-    <TrimmerRootDescriptor Include="TrimmerRoots.xml" />
-  </ItemGroup>
+
 
   <!-- Pinned for reproducible CI builds. -->
   <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.371">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.9457" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
-    <PackageReference Include="System.Management" Version="9.0.23" Condition="'$(PublishAot)' != 'true'" />
     <!-- Transitive Windows AI/ML payloads (onnxruntime, DirectML, AI winmds) are
          unused by this app; excluding them saves ~40 MB per package. -->
     <PackageReference Include="Microsoft.WindowsAppSDK.AI" Version="2.6.5" ExcludeAssets="all" />
@@ -91,6 +88,9 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3719.77" ExcludeAssets="all" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Search" Version="2.6.5" ExcludeAssets="all" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Widgets" Version="2.6.5" ExcludeAssets="all" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="WmiLight" Version="7.3.0" />
   </ItemGroup>
 
   <!-- NativeAOT size tuning: optimize for size, fold identical method bodies,
@@ -101,6 +101,7 @@
     <IlcOptimizationPreference>Size</IlcOptimizationPreference>
     <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
     <DebuggerSupport>false</DebuggerSupport>
+    <PublishWmiLightStaticallyLinked>true</PublishWmiLightStaticallyLinked>
   </PropertyGroup>
 
 </Project>

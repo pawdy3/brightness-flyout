@@ -1,4 +1,14 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using BrightFlyout.Native;
+using Windows.Win32;
+using Windows.Win32.Devices.Display;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Gdi;
 
 namespace BrightFlyout.Services.Displays;
 
@@ -34,60 +44,69 @@ internal sealed class DdcCiDisplayController : IDisplayController
     /// Caller owns the returned handles and must destroy them via
     /// <see cref="DestroyAll"/>. Blocks the calling thread (slow I2C).
     /// </summary>
-    public static List<(NativeMethods.PHYSICAL_MONITOR Monitor, string DeviceName)> EnumerateAll()
+    public static unsafe List<(PHYSICAL_MONITOR Monitor, string DeviceName)> EnumerateAll()
     {
-        var result = new List<(NativeMethods.PHYSICAL_MONITOR, string)>();
-
-        NativeMethods.MonitorEnumProc callback = (hMonitor, _, _, _) =>
+        var result = new List<(PHYSICAL_MONITOR, string)>();
+        var resultHandle = GCHandle.Alloc(result);
+        try
         {
-            var info = new NativeMethods.MONITORINFOEX
-            {
-                cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFOEX>()
-            };
-            NativeMethods.GetMonitorInfoW(hMonitor, ref info);
+            PInvoke.EnumDisplayMonitors(
+                default(HDC), null, &OnMonitorEnum, (LPARAM)(nint)resultHandle);
+        }
+        finally
+        {
+            resultHandle.Free();
+        }
 
-            if (NativeMethods.GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, out var count) && count > 0)
-            {
-                var monitors = new NativeMethods.PHYSICAL_MONITOR[count];
-                if (NativeMethods.GetPhysicalMonitorsFromHMONITOR(hMonitor, count, monitors))
-                {
-                    foreach (var monitor in monitors)
-                    {
-                        result.Add((monitor, info.szDevice ?? string.Empty));
-                    }
-                }
-            }
-
-            return true;
-        };
-
-        NativeMethods.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, callback, IntPtr.Zero);
         return result;
     }
 
-    public static void DestroyAll(List<(NativeMethods.PHYSICAL_MONITOR Monitor, string DeviceName)> monitors)
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static unsafe BOOL OnMonitorEnum(HMONITOR hMonitor, HDC hdcMonitor, RECT* lprcMonitor, LPARAM dwData)
+    {
+        var result = (List<(PHYSICAL_MONITOR, string)>)GCHandle.FromIntPtr(dwData.Value).Target!;
+
+        var info = new MONITORINFOEXW();
+        info.monitorInfo.cbSize = (uint)Marshal.SizeOf<MONITORINFOEXW>();
+        PInvoke.GetMonitorInfo(hMonitor, (MONITORINFO*)&info);
+
+        if (PInvoke.GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor, out var count) && count > 0)
+        {
+            var monitors = new PHYSICAL_MONITOR[count];
+            if (PInvoke.GetPhysicalMonitorsFromHMONITOR(hMonitor, monitors))
+            {
+                foreach (var monitor in monitors)
+                {
+                    result.Add((monitor, info.szDevice.ToString()));
+                }
+            }
+        }
+
+        return true;
+    }
+
+    public static void DestroyAll(List<(PHYSICAL_MONITOR Monitor, string DeviceName)> monitors)
     {
         foreach (var group in monitors.GroupBy(m => m.DeviceName))
         {
-            var arr = group.Select(g => g.Monitor).ToArray();
-            NativeMethods.DestroyPhysicalMonitors((uint)arr.Length, arr);
+            PInvoke.DestroyPhysicalMonitors(group.Select(g => g.Monitor).ToArray());
         }
     }
 
     /// <summary>Runs an operation against this display's physical monitor handle.</summary>
-    private T? WithHandle<T>(Func<IntPtr, (bool Ok, T Value)> operation) where T : struct
+    private T? WithHandle<T>(Func<HANDLE, (bool Ok, T Value)> operation) where T : struct
     {
         var all = EnumerateAll();
         try
         {
             // NOTE: hPhysicalMonitor can legitimately be zero - zero is a valid
             // handle here, not a "no match" sentinel. Use an explicit loop.
-            IntPtr handle = IntPtr.Zero;
+            HANDLE handle = default;
             var found = false;
             foreach (var m in all)
             {
                 if (m.DeviceName == _deviceName
-                    && m.Monitor.szPhysicalMonitorDescription == _description)
+                    && m.Monitor.szPhysicalMonitorDescription.Equals(_description))
                 {
                     handle = m.Monitor.hPhysicalMonitor;
                     found = true;
@@ -116,13 +135,16 @@ internal sealed class DdcCiDisplayController : IDisplayController
         }
     }
 
-    public Task<int?> RefreshBrightnessAsync() => Task.Run(() =>
+    public unsafe Task<int?> RefreshBrightnessAsync() => Task.Run(() =>
     {
         var result = WithHandle<int>(handle =>
-            NativeMethods.GetVCPFeatureAndVCPFeatureReply(
-                handle, NativeMethods.VCP_CODE_LUMINANCE, IntPtr.Zero, out var current, out var maximum)
+        {
+            uint current, maximum;
+            return PInvoke.GetVCPFeatureAndVCPFeatureReply(
+                handle, Win32.VcpCodeLuminance, null, &current, &maximum) != 0
                 ? (true, maximum == 0 ? 0 : (int)Math.Round(current * 100.0 / maximum))
-                : (false, 0));
+                : (false, 0);
+        });
 
         if (result.HasValue)
         {
@@ -172,19 +194,20 @@ internal sealed class DdcCiDisplayController : IDisplayController
         }
     }
 
-    private void WriteCore(int percent)
+    private unsafe void WriteCore(int percent)
     {
         var result = WithHandle<int>(handle =>
         {
-            if (NativeMethods.GetVCPFeatureAndVCPFeatureReply(
-                    handle, NativeMethods.VCP_CODE_LUMINANCE, IntPtr.Zero, out _, out var maximum) && maximum > 0)
+            uint current, maximum;
+            if (PInvoke.GetVCPFeatureAndVCPFeatureReply(
+                    handle, Win32.VcpCodeLuminance, null, &current, &maximum) != 0 && maximum > 0)
             {
                 var raw = (uint)Math.Round(percent / 100.0 * maximum);
-                return (NativeMethods.SetVCPFeature(handle, NativeMethods.VCP_CODE_LUMINANCE, raw), 0);
+                return (PInvoke.SetVCPFeature(handle, Win32.VcpCodeLuminance, raw) != 0, 0);
             }
 
             // Some monitors accept 0-100 even when the capability read fails.
-            return (NativeMethods.SetVCPFeature(handle, NativeMethods.VCP_CODE_LUMINANCE, (uint)percent), 0);
+            return (PInvoke.SetVCPFeature(handle, Win32.VcpCodeLuminance, (uint)percent) != 0, 0);
         });
 
         if (!result.HasValue)

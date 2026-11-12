@@ -1,8 +1,14 @@
+using System;
 using System.ComponentModel;
-using BrightFlyout.Native;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using BrightFlyout.Services.Displays;
 using BrightFlyout.Views;
 using Microsoft.UI.Dispatching;
+using Windows.Win32;
+using Windows.Win32.Foundation;
 
 namespace BrightFlyout.Services;
 
@@ -12,6 +18,9 @@ namespace BrightFlyout.Services;
 /// </summary>
 internal sealed class BrightnessController : IDisposable
 {
+    // Unmanaged callbacks (window subclass) cannot capture; the controller is a singleton.
+    private static BrightnessController? _current;
+
     private readonly SettingsService _settings;
     private readonly OsdManager _osd;
     private readonly KeyboardHookService _hook;
@@ -20,7 +29,6 @@ internal sealed class BrightnessController : IDisposable
     private readonly DispatcherQueueTimer _suppressWatchdog;
     private readonly DispatcherQueueTimer _restoreTimer;
     private readonly DispatcherQueueTimer _hotplugTimer;
-    private NativeMethods.SubclassProc? _displayChangeSubclassProc;
 
     // Excluded-panel revert state (see OnWmiBrightnessChanged).
     private int? _wmiRevertingTo;
@@ -70,18 +78,19 @@ internal sealed class BrightnessController : IDisposable
         _hotplugTimer.Tick += (_, _) => _ = RefreshDisplaysAsync();
     }
 
-    private IntPtr DisplayChangeSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, UIntPtr dwRefData)
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static LRESULT DisplayChangeSubclassProc(HWND hWnd, uint uMsg, WPARAM wParam, LPARAM lParam, nuint uIdSubclass, nuint dwRefData)
     {
-        if (uMsg == NativeMethods.WM_DISPLAYCHANGE)
+        if (uMsg == PInvoke.WM_DISPLAYCHANGE && _current is { } self)
         {
-            _dispatcherQueue.TryEnqueue(() =>
+            self._dispatcherQueue.TryEnqueue(() =>
             {
-                _hotplugTimer.Stop();
-                _hotplugTimer.Start();
+                self._hotplugTimer.Stop();
+                self._hotplugTimer.Start();
             });
         }
 
-        return NativeMethods.DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        return PInvoke.DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
     private void OnOsdAutoHidden()
@@ -91,14 +100,14 @@ internal sealed class BrightnessController : IDisposable
         _restoreTimer.Start();
     }
 
-    public void Start()
+    public unsafe void Start()
     {
+        _current = this;
         _hook.Install(_osd.Hwnd);
 
         // The OSD window is always alive (hidden), so it receives display-change
         // broadcasts even with no visible UI.
-        _displayChangeSubclassProc = DisplayChangeSubclassProc;
-        NativeMethods.SetWindowSubclass(_osd.Hwnd, _displayChangeSubclassProc, (UIntPtr)3, UIntPtr.Zero);
+        PInvoke.SetWindowSubclass(_osd.Hwnd, &DisplayChangeSubclassProc, 3, 0);
 
         _ = RefreshDisplaysAsync();
     }
@@ -301,18 +310,15 @@ internal sealed class BrightnessController : IDisposable
         _osd.ShowBrightness(Displays.Target?.Brightness ?? 65);
     }
 
-    public void Dispose()
+    public unsafe void Dispose()
     {
         _osd.AutoHidden -= OnOsdAutoHidden;
         _settings.PropertyChanged -= OnSettingsPropertyChanged;
         _suppressWatchdog.Stop();
         _restoreTimer.Stop();
         _hotplugTimer.Stop();
-        if (_displayChangeSubclassProc is not null)
-        {
-            NativeMethods.RemoveWindowSubclass(_osd.Hwnd, _displayChangeSubclassProc, (UIntPtr)3);
-            _displayChangeSubclassProc = null;
-        }
+        PInvoke.RemoveWindowSubclass(_osd.Hwnd, &DisplayChangeSubclassProc, 3);
+        _current = null;
 
         _wmiWatcher.Dispose();
         _hook.Dispose();

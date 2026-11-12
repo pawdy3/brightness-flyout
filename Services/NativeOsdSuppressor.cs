@@ -1,4 +1,11 @@
-using BrightFlyout.Native;
+using System;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.Accessibility;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace BrightFlyout.Services;
 
@@ -11,20 +18,19 @@ namespace BrightFlyout.Services;
 /// Suppression is always transient - the native OSD is restored a moment after the
 /// last key press and unconditionally on app shutdown.
 /// </summary>
-internal static class NativeOsdSuppressor
+internal static unsafe class NativeOsdSuppressor
 {
-    private static IntPtr _nativeOsdElement = IntPtr.Zero;
-    private static long _originalExStyle;
-    private static readonly HashSet<IntPtr> _legacyOsdElements = [];
+    private static HWND _nativeOsdElement;
+    private static int _originalExStyle;
+    private static readonly HashSet<HWND> _legacyOsdElements = [];
     private static bool _loggedLegacySearch;
 
     // Out-of-context WinEvent hook, armed while suppression is active. Polling
     // alone hides the OSD up to a watchdog interval too late (visible flash);
     // the show-event fires before the window gets to paint.
-    private static IntPtr _winEventHook;
-    private static NativeMethods.WinEventProc? _winEventProc;
+    private static HWINEVENTHOOK _winEventHook;
 
-    public static bool IsSuppressed => _nativeOsdElement != IntPtr.Zero || _legacyOsdElements.Count > 0;
+    public static bool IsSuppressed => !_nativeOsdElement.IsNull || _legacyOsdElements.Count > 0;
 
     public static void Suppress()
     {
@@ -43,21 +49,21 @@ internal static class NativeOsdSuppressor
 
     private static void ArmShowEventHook()
     {
-        if (_winEventHook != IntPtr.Zero)
+        if (!_winEventHook.IsNull)
         {
             return;
         }
 
-        _winEventProc = OnWinEvent; // keep a reference so the GC can't collect the callback
-        _winEventHook = NativeMethods.SetWinEventHook(
-            NativeMethods.EVENT_OBJECT_SHOW, NativeMethods.EVENT_OBJECT_SHOW,
-            IntPtr.Zero, _winEventProc, 0, 0, NativeMethods.WINEVENT_OUTOFCONTEXT);
+        _winEventHook = PInvoke.SetWinEventHook(
+            PInvoke.EVENT_OBJECT_SHOW, PInvoke.EVENT_OBJECT_SHOW,
+            default(HMODULE), &OnWinEvent, 0, 0, PInvoke.WINEVENT_OUTOFCONTEXT);
     }
 
-    private static void OnWinEvent(IntPtr hWinEventHook, uint eventType, IntPtr hwnd,
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static void OnWinEvent(HWINEVENTHOOK hWinEventHook, uint eventType, HWND hwnd,
         int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
     {
-        if (idObject != NativeMethods.OBJID_WINDOW || hwnd == IntPtr.Zero)
+        if (idObject != (int)OBJECT_IDENTIFIER.OBJID_WINDOW || hwnd.IsNull)
         {
             return;
         }
@@ -72,24 +78,25 @@ internal static class NativeOsdSuppressor
         // Win10: the same NativeHWNDHost is re-shown on every key press.
         if (_legacyOsdElements.Contains(hwnd))
         {
-            NativeMethods.ShowWindow(hwnd, NativeMethods.SW_HIDE);
+            PInvoke.ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_HIDE);
             return;
         }
 
-        var className = new System.Text.StringBuilder(64);
-        if (NativeMethods.GetClassNameW(hwnd, className, className.Capacity) == 0
-            || className.ToString() != "NativeHWNDHost"
-            || NativeMethods.FindWindowExW(hwnd, IntPtr.Zero, "DirectUIHWND", null) == IntPtr.Zero)
+        Span<char> className = stackalloc char[64];
+        var length = PInvoke.GetClassName(hwnd, className);
+        if (length == 0
+            || !className[..length].SequenceEqual("NativeHWNDHost")
+            || PInvoke.FindWindowEx(hwnd, default, "DirectUIHWND", null).IsNull)
         {
             return;
         }
 
         if (_legacyOsdElements.Add(hwnd))
         {
-            Log.Write($"Legacy OSD host hidden: 0x{hwnd.ToInt64():X} (show event)");
+            Log.Write($"Legacy OSD host hidden: 0x{(nint)hwnd.Value:X} (show event)");
         }
 
-        NativeMethods.ShowWindow(hwnd, NativeMethods.SW_HIDE);
+        PInvoke.ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_HIDE);
     }
 
     /// <summary>Windows 10 and earlier: the OSD is a DirectUI popup hosted in a
@@ -97,10 +104,10 @@ internal static class NativeOsdSuppressor
     /// several such hosts; hide all that contain a DirectUIHWND child.</summary>
     private static void SuppressLegacyOsd()
     {
-        IntPtr hwnd = IntPtr.Zero;
-        while ((hwnd = NativeMethods.FindWindowExW(IntPtr.Zero, hwnd, "NativeHWNDHost", null)) != IntPtr.Zero)
+        HWND hwnd = default;
+        while (!(hwnd = PInvoke.FindWindowEx(default, hwnd, "NativeHWNDHost", null)).IsNull)
         {
-            if (NativeMethods.FindWindowExW(hwnd, IntPtr.Zero, "DirectUIHWND", null) == IntPtr.Zero)
+            if (PInvoke.FindWindowEx(hwnd, default, "DirectUIHWND", null).IsNull)
             {
                 continue;
             }
@@ -109,10 +116,10 @@ internal static class NativeOsdSuppressor
             // every key press - re-hide known hosts on every tick, not just once.
             if (_legacyOsdElements.Add(hwnd))
             {
-                Log.Write($"Legacy OSD host hidden: 0x{hwnd.ToInt64():X}");
+                Log.Write($"Legacy OSD host hidden: 0x{(nint)hwnd.Value:X}");
             }
 
-            NativeMethods.ShowWindow(hwnd, NativeMethods.SW_HIDE);
+            PInvoke.ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_HIDE);
         }
 
         if (_legacyOsdElements.Count == 0 && !_loggedLegacySearch)
@@ -125,7 +132,7 @@ internal static class NativeOsdSuppressor
     /// <summary>Windows 11 22H2+: the OSD lives in an explorer-hosted XAML island.</summary>
     private static bool SuppressWindows11Osd()
     {
-        if (_nativeOsdElement != IntPtr.Zero)
+        if (!_nativeOsdElement.IsNull)
         {
             // Explorer can re-show the island between watchdog ticks; re-apply.
             ApplyWin11Suppression();
@@ -134,31 +141,31 @@ internal static class NativeOsdSuppressor
 
         // Walk the XAML islands; FindWindowEx must be given the previous handle as
         // hwndChildAfter, otherwise it returns the same first island forever.
-        IntPtr hwndXamlIsland = IntPtr.Zero;
-        IntPtr hwndOsd = IntPtr.Zero;
-        while ((hwndXamlIsland = NativeMethods.FindWindowExW(IntPtr.Zero, hwndXamlIsland, "XamlExplorerHostIslandWindow", null)) != IntPtr.Zero)
+        HWND hwndXamlIsland = default;
+        HWND hwndOsd = default;
+        while (!(hwndXamlIsland = PInvoke.FindWindowEx(default, hwndXamlIsland, "XamlExplorerHostIslandWindow", null)).IsNull)
         {
-            hwndOsd = NativeMethods.FindWindowExW(hwndXamlIsland, IntPtr.Zero,
+            hwndOsd = PInvoke.FindWindowEx(hwndXamlIsland, default,
                 "Windows.UI.Composition.DesktopWindowContentBridge", "DesktopWindowXamlSource");
-            if (hwndOsd == IntPtr.Zero)
+            if (hwndOsd.IsNull)
             {
                 continue;
             }
 
-            var hwndInputClass = NativeMethods.FindWindowExW(hwndOsd, IntPtr.Zero,
+            var hwndInputClass = PInvoke.FindWindowEx(hwndOsd, default,
                 "Windows.UI.Input.InputSite.WindowClass", null);
-            if (hwndInputClass == IntPtr.Zero)
+            if (hwndInputClass.IsNull)
             {
-                hwndOsd = IntPtr.Zero;
+                hwndOsd = default;
                 continue;
             }
 
-            NativeMethods.ShowWindow(hwndInputClass, NativeMethods.SW_SHOWNOACTIVATE);
-            if (NativeMethods.GetWindowRect(hwndInputClass, out var rect))
+            PInvoke.ShowWindow(hwndInputClass, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+            if (PInvoke.GetWindowRect(hwndInputClass, out var rect))
             {
-                if (rect is { Top: 0, Left: 0, Bottom: 0, Right: 0 })
+                if (rect is { top: 0, left: 0, bottom: 0, right: 0 })
                 {
-                    hwndOsd = IntPtr.Zero;
+                    hwndOsd = default;
                 }
                 else
                 {
@@ -167,54 +174,54 @@ internal static class NativeOsdSuppressor
             }
         }
 
-        if (hwndOsd == IntPtr.Zero)
+        if (hwndOsd.IsNull)
         {
             return false; // OSD window not found (nothing to suppress right now)
         }
 
         _nativeOsdElement = hwndXamlIsland;
-        _originalExStyle = NativeMethods.GetWindowLongPtr(_nativeOsdElement, NativeMethods.GWL_EXSTYLE);
+        _originalExStyle = PInvoke.GetWindowLong(_nativeOsdElement, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
         ApplyWin11Suppression();
-        Log.Write($"Win11 OSD island hidden: 0x{_nativeOsdElement.ToInt64():X}");
+        Log.Write($"Win11 OSD island hidden: 0x{(nint)_nativeOsdElement.Value:X}");
         return true;
     }
 
     private static void ApplyWin11Suppression()
     {
-        NativeMethods.SetWindowLongPtr(_nativeOsdElement, NativeMethods.GWL_EXSTYLE,
-            _originalExStyle | NativeMethods.WS_EX_LAYERED | NativeMethods.WS_EX_TRANSPARENT);
-        NativeMethods.SetWindowPos(_nativeOsdElement, IntPtr.Zero, -99999, -99999, 0, 0,
-            NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+        PInvoke.SetWindowLong(_nativeOsdElement, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE,
+            (int)((uint)_originalExStyle | (uint)(WINDOW_EX_STYLE.WS_EX_LAYERED | WINDOW_EX_STYLE.WS_EX_TRANSPARENT)));
+        PInvoke.SetWindowPos(_nativeOsdElement, default, -99999, -99999, 0, 0,
+            SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
         // Minimize without activating: plain SW_MINIMIZE would make Windows move
         // foreground focus to whatever is next in the Z-order.
-        NativeMethods.ShowWindow(_nativeOsdElement, NativeMethods.SW_SHOWMINNOACTIVE);
+        PInvoke.ShowWindow(_nativeOsdElement, SHOW_WINDOW_CMD.SW_SHOWMINNOACTIVE);
     }
 
     public static void Restore()
     {
-        if (_winEventHook != IntPtr.Zero)
+        if (!_winEventHook.IsNull)
         {
-            NativeMethods.UnhookWinEvent(_winEventHook);
-            _winEventHook = IntPtr.Zero;
+            PInvoke.UnhookWinEvent(_winEventHook);
+            _winEventHook = default;
         }
 
         foreach (var hwnd in _legacyOsdElements)
         {
-            NativeMethods.ShowWindow(hwnd, NativeMethods.SW_SHOWNOACTIVATE);
+            PInvoke.ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
         }
 
         _legacyOsdElements.Clear();
 
-        if (_nativeOsdElement == IntPtr.Zero)
+        if (_nativeOsdElement.IsNull)
         {
             return;
         }
 
-        NativeMethods.SetWindowLongPtr(_nativeOsdElement, NativeMethods.GWL_EXSTYLE, _originalExStyle);
-        NativeMethods.SetWindowPos(_nativeOsdElement, IntPtr.Zero, 0, 0, 0, 0,
-            NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+        PInvoke.SetWindowLong(_nativeOsdElement, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE, _originalExStyle);
+        PInvoke.SetWindowPos(_nativeOsdElement, default, 0, 0, 0, 0,
+            SET_WINDOW_POS_FLAGS.SWP_NOSIZE | SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
         // Restore without activating: SW_RESTORE would steal foreground focus.
-        NativeMethods.ShowWindow(_nativeOsdElement, NativeMethods.SW_SHOWNOACTIVATE);
-        _nativeOsdElement = IntPtr.Zero;
+        PInvoke.ShowWindow(_nativeOsdElement, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);
+        _nativeOsdElement = default;
     }
 }

@@ -1,4 +1,9 @@
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using BrightFlyout.ViewModels;
 
 namespace BrightFlyout.Services.Displays;
@@ -75,7 +80,7 @@ public sealed class DisplayManager
         {
             foreach (var (monitor, deviceName) in physical)
             {
-                var description = monitor.szPhysicalMonitorDescription;
+                var description = monitor.szPhysicalMonitorDescription.ToString();
                 // DDC over I2C is flaky (especially via HDMI): retry the probe once.
                 bool ddcWorks = ProbeDdc(monitor.hPhysicalMonitor);
                 if (!ddcWorks)
@@ -109,10 +114,14 @@ public sealed class DisplayManager
         return controllers;
     }
 
-    private static bool ProbeDdc(IntPtr hPhysicalMonitor) =>
-        Native.NativeMethods.GetVCPFeatureAndVCPFeatureReply(
-            hPhysicalMonitor, Native.NativeMethods.VCP_CODE_LUMINANCE,
-            IntPtr.Zero, out _, out _);
+    private static unsafe bool ProbeDdc(Windows.Win32.Foundation.HANDLE hPhysicalMonitor)
+    {
+        // dxva2 rejects null out-pointers with ERROR_INVALID_PARAMETER.
+        uint current, maximum;
+        return Windows.Win32.PInvoke.GetVCPFeatureAndVCPFeatureReply(
+            hPhysicalMonitor, Native.Win32.VcpCodeLuminance,
+            null, &current, &maximum) != 0;
+    }
 
     private void SyncCollection(List<IDisplayController> controllers)
     {

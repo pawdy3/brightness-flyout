@@ -1,5 +1,5 @@
-#if BRIGHTFLYOUT_WMI
-using System.Management;
+using System;
+using WmiLight;
 
 namespace BrightFlyout.Services.Displays;
 
@@ -12,40 +12,39 @@ namespace BrightFlyout.Services.Displays;
 /// </summary>
 internal sealed class WmiBrightnessWatcher : IDisposable
 {
-    private ManagementEventWatcher? _watcher;
+    private WmiConnection? _connection;
+    private WmiEventSubscription? _subscription;
 
-    /// <summary>Raised on a WMI thread pool thread with the new brightness (0-100).</summary>
+    /// <summary>Raised on a WMI thread with the new brightness (0-100).</summary>
     public event Action<int>? BrightnessChanged;
 
-    /// <summary>Starts watching. No-op when the system has no internal panel.</summary>
+    /// <summary>Starts watching. Logs and gives up when the system has no internal panel.</summary>
     public void Start()
     {
-        if (_watcher is not null)
+        if (_subscription is not null)
         {
             return;
         }
 
         try
         {
-            _watcher = new ManagementEventWatcher(@"root\wmi",
-                "SELECT * FROM WmiMonitorBrightnessEvent");
-            _watcher.EventArrived += OnEventArrived;
-            _watcher.Start();
+            _connection = new WmiConnection(@"root\wmi");
+            _subscription = _connection.CreateEventSubscription(
+                "SELECT * FROM WmiMonitorBrightnessEvent", OnBrightnessEvent);
             Log.Write("WMI brightness watcher started");
         }
         catch (Exception ex)
         {
             Log.Write("WMI brightness watcher unavailable", ex);
-            _watcher?.Dispose();
-            _watcher = null;
+            Dispose();
         }
     }
 
-    private void OnEventArrived(object sender, EventArrivedEventArgs e)
+    private void OnBrightnessEvent(WmiObject eventObject)
     {
         try
         {
-            var brightness = Convert.ToInt32(e.NewEvent["Brightness"]);
+            var brightness = Convert.ToInt32(eventObject["Brightness"]);
             BrightnessChanged?.Invoke(Math.Clamp(brightness, 0, 100));
         }
         catch
@@ -58,33 +57,23 @@ internal sealed class WmiBrightnessWatcher : IDisposable
     {
         try
         {
-            _watcher?.Stop();
+            _subscription?.Dispose();
         }
         catch
         {
             // ignore
         }
 
-        _watcher?.Dispose();
-        _watcher = null;
+        try
+        {
+            _connection?.Dispose();
+        }
+        catch
+        {
+            // ignore
+        }
+
+        _subscription = null;
+        _connection = null;
     }
 }
-#else
-namespace BrightFlyout.Services.Displays;
-
-/// <summary>AOT build stub: no WMI, so no OS-side brightness events to watch.</summary>
-internal sealed class WmiBrightnessWatcher : IDisposable
-{
-#pragma warning disable CS0067 // event is never raised in the stub
-    public event Action<int>? BrightnessChanged;
-#pragma warning restore CS0067
-
-    public void Start()
-    {
-    }
-
-    public void Dispose()
-    {
-    }
-}
-#endif

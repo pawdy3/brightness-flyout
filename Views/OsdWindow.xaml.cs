@@ -1,5 +1,8 @@
+using System;
 using System.ComponentModel;
-using BrightFlyout.Native;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using BrightFlyout.Services;
 using BrightFlyout.Services.Displays;
 using Microsoft.UI;
@@ -9,6 +12,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 using Windows.UI;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Dwm;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace BrightFlyout.Views;
 
@@ -32,7 +39,7 @@ public sealed partial class OsdWindow : Window
 
     private readonly SettingsService _settings;
     private readonly DispatcherQueueTimer _hideTimer;
-    private readonly IntPtr _hwnd;
+    private readonly HWND _hwnd;
     private readonly AppWindow _appWindow;
 
     private readonly RectInt32 _workArea;
@@ -42,14 +49,13 @@ public sealed partial class OsdWindow : Window
     private bool _acrylicAvailable = true;
     private bool _isExpanded;
     private bool _pointerInside;
-    private NativeMethods.SubclassProc? _frameSubclassProc;
 
-    public IntPtr Hwnd => _hwnd;
+    internal HWND Hwnd => _hwnd;
 
     /// <summary>Fired when the OSD auto-hides after its timeout.</summary>
     public event Action? AutoHidden;
 
-    public OsdWindow(SettingsService settings, RectInt32 workArea)
+    public unsafe OsdWindow(SettingsService settings, RectInt32 workArea)
     {
         _settings = settings;
         _workArea = workArea;
@@ -66,7 +72,7 @@ public sealed partial class OsdWindow : Window
             _acrylicAvailable = false;
         }
 
-        _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        _hwnd = new HWND(WinRT.Interop.WindowNative.GetWindowHandle(this));
         var windowId = Win32Interop.GetWindowIdFromWindow(_hwnd);
         _appWindow = AppWindow.GetFromWindowId(windowId);
 
@@ -82,18 +88,17 @@ public sealed partial class OsdWindow : Window
         // reverting SetWindowLongPtr changes). DWM draws that as a bright ring around
         // the flyout. The reliable fix is to remove the non-client area entirely via
         // WM_NCCALCSIZE so the XAML content covers the whole window.
-        _frameSubclassProc = FrameSubclassProc;
-        NativeMethods.SetWindowSubclass(_hwnd, _frameSubclassProc, (UIntPtr)2, UIntPtr.Zero);
+        PInvoke.SetWindowSubclass(_hwnd, &FrameSubclassProc, 2, 0);
 
         // Keep it out of Alt+Tab and never let it take focus.
-        var exStyle = NativeMethods.GetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE);
-        NativeMethods.SetWindowLongPtr(_hwnd, NativeMethods.GWL_EXSTYLE,
-            exStyle | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE);
+        var exStyle = (uint)PInvoke.GetWindowLong(_hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE);
+        PInvoke.SetWindowLong(_hwnd, WINDOW_LONG_PTR_INDEX.GWL_EXSTYLE,
+            (int)(exStyle | (uint)(WINDOW_EX_STYLE.WS_EX_TOOLWINDOW | WINDOW_EX_STYLE.WS_EX_NOACTIVATE)));
 
         // Rounded window corners on Windows 11.
-        int cornerPreference = NativeMethods.DWMWCP_ROUND;
-        NativeMethods.DwmSetWindowAttribute(_hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE,
-            ref cornerPreference, sizeof(int));
+        var cornerPreference = DWM_WINDOW_CORNER_PREFERENCE.DWMWCP_ROUND;
+        PInvoke.DwmSetWindowAttribute(_hwnd, DWMWINDOWATTRIBUTE.DWMWA_WINDOW_CORNER_PREFERENCE,
+            &cornerPreference, (uint)sizeof(DWM_WINDOW_CORNER_PREFERENCE));
 
         ResizeAndReposition();
 
@@ -108,7 +113,7 @@ public sealed partial class OsdWindow : Window
                 return;
             }
 
-            NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_HIDE);
+            PInvoke.ShowWindow(_hwnd, SHOW_WINDOW_CMD.SW_HIDE);
             AutoHidden?.Invoke();
         };
 
@@ -116,7 +121,9 @@ public sealed partial class OsdWindow : Window
         ApplyAppearance();
 
         // WinUI shows new windows by default; keep the OSD hidden until needed.
-        NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_HIDE);
+        PInvoke.ShowWindow(_hwnd, SHOW_WINDOW_CMD.SW_HIDE);
+
+        Closed += (_, _) => PInvoke.RemoveWindowSubclass(_hwnd, &FrameSubclassProc, 2);
     }
 
     /// <summary>Wires the display list into the expanded view. Called once after startup.</summary>
@@ -196,7 +203,7 @@ public sealed partial class OsdWindow : Window
         UpdateValue(value);
 
         ResizeAndReposition();
-        NativeMethods.ShowWindow(_hwnd, NativeMethods.SW_SHOWNA);
+        PInvoke.ShowWindow(_hwnd, SHOW_WINDOW_CMD.SW_SHOWNA);
 
         _hideTimer.Stop();
         _hideTimer.Interval = TimeSpan.FromMilliseconds(_settings.OsdDurationMs);
@@ -331,21 +338,22 @@ public sealed partial class OsdWindow : Window
 
     #endregion
 
-    private IntPtr FrameSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, UIntPtr dwRefData)
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static LRESULT FrameSubclassProc(HWND hWnd, uint uMsg, WPARAM wParam, LPARAM lParam, nuint uIdSubclass, nuint dwRefData)
     {
-        if (uMsg == NativeMethods.WM_NCCALCSIZE && wParam != IntPtr.Zero)
+        if (uMsg == PInvoke.WM_NCCALCSIZE && wParam.Value != 0)
         {
             // wParam == TRUE: returning 0 makes the client area cover the whole
             // window, leaving DWM no non-client frame to paint.
-            return IntPtr.Zero;
+            return (LRESULT)0;
         }
 
-        return NativeMethods.DefSubclassProc(hWnd, uMsg, wParam, lParam);
+        return PInvoke.DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
     private void ResizeAndReposition()
     {
-        double scale = NativeMethods.GetDpiForWindow(_hwnd) / 96.0;
+        double scale = PInvoke.GetDpiForWindow(_hwnd) / 96.0;
         int width = (int)Math.Round(WidthDip * scale);
 
         double heightDip = CollapsedHeightDip;
