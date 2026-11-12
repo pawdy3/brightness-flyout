@@ -15,7 +15,7 @@ internal static class NativeOsdSuppressor
 {
     private static IntPtr _nativeOsdElement = IntPtr.Zero;
     private static long _originalExStyle;
-    private static readonly List<IntPtr> _legacyOsdElements = [];
+    private static readonly HashSet<IntPtr> _legacyOsdElements = [];
     private static bool _loggedLegacySearch;
 
     public static bool IsSuppressed => _nativeOsdElement != IntPtr.Zero || _legacyOsdElements.Count > 0;
@@ -41,15 +41,19 @@ internal static class NativeOsdSuppressor
         IntPtr hwnd = IntPtr.Zero;
         while ((hwnd = NativeMethods.FindWindowExW(IntPtr.Zero, hwnd, "NativeHWNDHost", null)) != IntPtr.Zero)
         {
-            if (_legacyOsdElements.Contains(hwnd)
-                || NativeMethods.FindWindowExW(hwnd, IntPtr.Zero, "DirectUIHWND", null) == IntPtr.Zero)
+            if (NativeMethods.FindWindowExW(hwnd, IntPtr.Zero, "DirectUIHWND", null) == IntPtr.Zero)
             {
                 continue;
             }
 
-            _legacyOsdElements.Add(hwnd);
+            // Windows 10 keeps the OSD window alive and re-shows the SAME hwnd on
+            // every key press - re-hide known hosts on every tick, not just once.
+            if (_legacyOsdElements.Add(hwnd))
+            {
+                Log.Write($"Legacy OSD host hidden: 0x{hwnd.ToInt64():X}");
+            }
+
             NativeMethods.ShowWindow(hwnd, NativeMethods.SW_HIDE);
-            Log.Write($"Legacy OSD host hidden: 0x{hwnd.ToInt64():X}");
         }
 
         if (_legacyOsdElements.Count == 0 && !_loggedLegacySearch)
@@ -64,7 +68,9 @@ internal static class NativeOsdSuppressor
     {
         if (_nativeOsdElement != IntPtr.Zero)
         {
-            return true; // already hidden
+            // Explorer can re-show the island between watchdog ticks; re-apply.
+            ApplyWin11Suppression();
+            return true;
         }
 
         // Walk the XAML islands; FindWindowEx must be given the previous handle as
@@ -109,6 +115,13 @@ internal static class NativeOsdSuppressor
 
         _nativeOsdElement = hwndXamlIsland;
         _originalExStyle = NativeMethods.GetWindowLongPtr(_nativeOsdElement, NativeMethods.GWL_EXSTYLE);
+        ApplyWin11Suppression();
+        Log.Write($"Win11 OSD island hidden: 0x{_nativeOsdElement.ToInt64():X}");
+        return true;
+    }
+
+    private static void ApplyWin11Suppression()
+    {
         NativeMethods.SetWindowLongPtr(_nativeOsdElement, NativeMethods.GWL_EXSTYLE,
             _originalExStyle | NativeMethods.WS_EX_LAYERED | NativeMethods.WS_EX_TRANSPARENT);
         NativeMethods.SetWindowPos(_nativeOsdElement, IntPtr.Zero, -99999, -99999, 0, 0,
@@ -116,8 +129,6 @@ internal static class NativeOsdSuppressor
         // Minimize without activating: plain SW_MINIMIZE would make Windows move
         // foreground focus to whatever is next in the Z-order.
         NativeMethods.ShowWindow(_nativeOsdElement, NativeMethods.SW_SHOWMINNOACTIVE);
-        Log.Write($"Win11 OSD island hidden: 0x{_nativeOsdElement.ToInt64():X}");
-        return true;
     }
 
     public static void Restore()
