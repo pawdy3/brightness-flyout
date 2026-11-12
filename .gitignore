@@ -2,7 +2,7 @@ bin/
 obj/
 .vs/
 *.user
-AppPackages/
+AppPackages*/
 AppPackagesHybrid/
 AppPackagesAotFd/
 laptop-package/
