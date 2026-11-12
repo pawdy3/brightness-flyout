@@ -281,6 +281,13 @@
                     </StackPanel>
                 </Border>
 
+                <TextBlock
+                    Margin="0,8,0,0"
+                    HorizontalAlignment="Center"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{x:Bind VersionText}" />
+
             </StackPanel>
         </ScrollViewer>
     </Grid>

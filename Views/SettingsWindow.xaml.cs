@@ -23,6 +23,9 @@ public sealed partial class SettingsWindow : Window
     private bool _initializing = true;
     private bool _sliderUpdating;
 
+    private string VersionText { get; } =
+        $"BrightFlyout {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?"}";
+
     public SettingsWindow(App app)
     {
         _app = app;
