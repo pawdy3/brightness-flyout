@@ -23,20 +23,7 @@ jobs:
       - name: Restore
         run: dotnet restore -p:Platform=x64 -r win-x64
 
-      # Artifact 1: NativeAOT single exe (~9 MB, zero prerequisites, portable).
-      - name: Publish (NativeAOT exe)
-        run: >-
-          dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-restore
-          -p:PublishAot=true -p:EnableMsixTooling=true
-
-      - name: Package AOT exe
-        shell: pwsh
-        run: |
-          $publish = "bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\publish"
-          Compress-Archive -Path "$publish\BrightFlyout.exe" -DestinationPath "BrightFlyout-win-x64.zip" -Force
-
-      # Artifact 2: MSIX installer (AOT exe + self-contained Windows App SDK,
-      # zero prerequisites). Signed with the stable self-signed cert from the
+      # Both MSIX variants are signed with the stable self-signed cert from the
       # MSIX_CERT_PFX_BASE64 secret (base64-encoded certs/BrightFlyout.pfx).
       - name: Decode signing certificate
         shell: pwsh
@@ -58,21 +45,41 @@ jobs:
           $m = $m -replace '(<Identity[^>]*Version=")[\d.]+(")', "`${1}$v.0`${2}"
           [IO.File]::WriteAllText("Package.appxmanifest", $m, [Text.UTF8Encoding]::new($true))
 
-      - name: Publish (MSIX)
+      # Artifact 1: AOT MSIX - NativeAOT exe + self-contained Windows App SDK.
+      # Smallest, zero prerequisites, but the WMI (internal laptop panel) path is
+      # not AOT-clean.
+      - name: Publish MSIX (AOT)
         run: >-
           dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-restore
           -p:BuildMSIX=true -p:PublishAot=true -p:EnableMsixTooling=true
           -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
           -p:PackageCertificateKeyFile=cert.pfx
+          -p:AppxPackageDir=out\aot\
+
+      # Artifact 2: hybrid MSIX - full .NET 10 runtime inside (reliable WMI),
+      # Windows App SDK pulled automatically as a framework package from the Store.
+      - name: Publish MSIX (hybrid)
+        run: >-
+          dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-restore
+          -p:BuildMSIX=true -p:PublishAot=false -p:SelfContained=true
+          -p:WindowsAppSDKSelfContained=false -p:EnableMsixTooling=true
+          -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
+          -p:PackageCertificateKeyFile=cert.pfx
+          -p:AppxPackageDir=out\hybrid\
+
+      - name: Stage artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force staging | Out-Null
+          Copy-Item (Get-Item out/aot/**/*_x64.msix).FullName staging/BrightFlyout_AOT_x64.msix
+          Copy-Item (Get-Item out/hybrid/**/*_x64.msix).FullName staging/BrightFlyout_Hybrid_x64.msix
+          Copy-Item BrightFlyout.cer staging/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: BrightFlyout-${{ github.sha }}
-          path: |
-            BrightFlyout-win-x64.zip
-            AppPackages/**/*_x64.msix
-            BrightFlyout.cer
+          path: staging/*
           retention-days: 30
 
       - name: Create GitHub Release
@@ -82,6 +89,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           gh release create ${{ github.ref_name }}
-          BrightFlyout-win-x64.zip (Get-Item AppPackages/**/*_x64.msix).FullName BrightFlyout.cer
+          staging/BrightFlyout_AOT_x64.msix staging/BrightFlyout_Hybrid_x64.msix staging/BrightFlyout.cer
           --title "BrightFlyout ${{ github.ref_name }}"
           --generate-notes

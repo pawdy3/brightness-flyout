@@ -44,7 +44,7 @@ built-in one.
 
 ## Build & run
 
-Requires: .NET 10 SDK, Windows App SDK 1.8 runtime (debug builds).
+Requires: .NET 10 SDK, Windows App SDK 2.6 runtime (debug builds).
 
 ```powershell
 dotnet build -c Debug -p:Platform=x64 -r win-x64
@@ -56,18 +56,18 @@ double-click opens Settings directly.
 
 ## Distribution
 
-CI (`.github/workflows/build.yml`) produces two artifacts on every push, and
-attaches them to a GitHub Release when a `v*` tag is pushed:
+CI (`.github/workflows/build.yml`) produces two MSIX packages on every push,
+and attaches them to a GitHub Release when a `v*` tag is pushed:
 
-| Artifact | Size | Prerequisites |
-|---|---|---|
-| `BrightFlyout-win-x64.zip` | ~9 MB | none (NativeAOT single exe, portable) |
-| `BrightFlyout_*_x64.msix` | ~45 MB | none (NativeAOT exe + self-contained Windows App SDK; cert trust, see below) |
+| Artifact | Size | Contains | Prerequisites |
+|---|---|---|---|
+| `BrightFlyout_AOT_x64.msix` | ~30 MB | NativeAOT exe + self-contained Windows App SDK | none — but the WMI path (internal laptop panels) is not AOT-clean and may misbehave |
+| `BrightFlyout_Hybrid_x64.msix` | ~45 MB | regular build + full .NET 10 runtime | Windows App SDK 2.6, pulled **automatically from the Microsoft Store** during install (needs network + Store access once) |
 
-Both contain the same NativeAOT build; the MSIX additionally bundles the Windows
-App SDK so it is a proper installer: Start Menu entry, Settings > Apps uninstall,
-and in-place upgrades (installing a newer `.msix` upgrades the app and keeps
-settings).
+Both are proper installers: Start Menu entry, Settings > Apps uninstall, and
+in-place upgrades (installing a newer `.msix` upgrades the app and keeps
+settings). Pick AOT for the smallest fully self-contained package; pick hybrid
+if internal laptop panel (WMI) control matters to you.
 
 ### Installing the MSIX (one-time cert trust)
 
@@ -102,21 +102,22 @@ repository secret (base64 of `certs\BrightFlyout.pfx`):
 Keep `certs\` private (gitignored) and back it up - a new cert means every
 machine has to trust it again before upgrading. The cert is valid until 2051.
 
-Local equivalents:
+Local equivalents (both need MSVC C++ build tools for AOT; MSIX signing uses
+`certs\BrightFlyout.pfx` automatically if present):
 
 ```powershell
-# NativeAOT single exe (needs MSVC C++ build tools)
+# portable NativeAOT single exe, no installer
 dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:PublishAot=true -p:EnableMsixTooling=true
 
-# MSIX (signed with certs\BrightFlyout.pfx if present)
+# AOT MSIX -> AppPackages\..._x64_Test\
 dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=true `
   -p:EnableMsixTooling=true -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
-# -> AppPackages\BrightFlyout_<version>_x64_Test\BrightFlyout_<version>_x64.msix
-```
 
-Note: System.Management (the WMI path for internal laptop panels) is not
-AOT-clean. If internal-panel control misbehaves in these builds, build locally
-without `-p:PublishAot=true`.
+# hybrid MSIX -> AppPackages\..._x64_Test\ (wipe that dir first if you built AOT into it)
+dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=false `
+  -p:SelfContained=true -p:WindowsAppSDKSelfContained=false `
+  -p:EnableMsixTooling=true -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
+```
 
 ## Notes
 
