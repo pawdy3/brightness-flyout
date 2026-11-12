@@ -215,6 +215,7 @@ public sealed partial class OsdWindow : Window
         value = Math.Clamp(value, 0, 100);
         FillScale.ScaleX = value / 100.0;
         PercentText.Text = $"{value}%";
+        UpdateThumbPosition();
     }
 
     #region Expand / collapse
@@ -291,8 +292,9 @@ public sealed partial class OsdWindow : Window
     #region Clickable bar (optional)
 
     private bool _barDragging;
+    private bool _pointerOverTrack;
 
-    private void OnCollapsedRowPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void OnTrackPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
         if (!_settings.ClickableFlyoutBar)
         {
@@ -300,12 +302,13 @@ public sealed partial class OsdWindow : Window
         }
 
         _barDragging = true;
-        ((UIElement)sender).CapturePointer(e.Pointer);
+        TrackArea.CapturePointer(e.Pointer);
         SetBarFromPointer(e);
+        UpdateThumbVisibility();
         e.Handled = true;
     }
 
-    private void OnCollapsedRowPointerMoved(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void OnTrackPointerMoved(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
         if (_barDragging)
         {
@@ -313,9 +316,42 @@ public sealed partial class OsdWindow : Window
         }
     }
 
-    private void OnCollapsedRowPointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void OnTrackPointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
     {
         _barDragging = false;
+        UpdateThumbVisibility();
+    }
+
+    private void OnTrackPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _pointerOverTrack = true;
+        UpdateThumbVisibility();
+    }
+
+    private void OnTrackPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    {
+        _pointerOverTrack = false;
+        UpdateThumbVisibility();
+    }
+
+    private void UpdateThumbVisibility()
+    {
+        // The dot mirrors the expanded sliders' thumbs; show it only when the bar
+        // is interactive (setting on) and hovered or dragged.
+        TrackThumb.Visibility = _settings.ClickableFlyoutBar && (_pointerOverTrack || _barDragging)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private void OnTrackAreaSizeChanged(object sender, SizeChangedEventArgs e) => UpdateThumbPosition();
+
+    private void UpdateThumbPosition()
+    {
+        var travel = TrackArea.ActualWidth - TrackThumb.Width;
+        if (travel > 0)
+        {
+            TrackThumb.Margin = new Thickness(FillScale.ScaleX * travel, 0, 0, 0);
+        }
     }
 
     private void SetBarFromPointer(Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
