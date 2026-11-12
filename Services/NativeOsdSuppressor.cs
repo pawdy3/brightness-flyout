@@ -49,6 +49,7 @@ internal static class NativeOsdSuppressor
 
             _legacyOsdElements.Add(hwnd);
             NativeMethods.ShowWindow(hwnd, NativeMethods.SW_HIDE);
+            Log.Write($"Legacy OSD host hidden: 0x{hwnd.ToInt64():X}");
         }
 
         if (_legacyOsdElements.Count == 0 && !_loggedLegacySearch)
@@ -115,6 +116,7 @@ internal static class NativeOsdSuppressor
         // Minimize without activating: plain SW_MINIMIZE would make Windows move
         // foreground focus to whatever is next in the Z-order.
         NativeMethods.ShowWindow(_nativeOsdElement, NativeMethods.SW_SHOWMINNOACTIVE);
+        Log.Write($"Win11 OSD island hidden: 0x{_nativeOsdElement.ToInt64():X}");
         return true;
     }
 

@@ -30,6 +30,7 @@
         <Slider
             Grid.Column="2"
             VerticalAlignment="Center"
+            IsEnabled="{x:Bind SlidersEnabled, Mode=OneWay}"
             Maximum="100"
             Minimum="0"
             StepFrequency="1"

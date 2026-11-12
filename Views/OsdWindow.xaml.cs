@@ -150,7 +150,19 @@ public sealed partial class OsdWindow : Window
 
         foreach (var display in _displays.IncludedDisplays)
         {
-            DisplayItems.Items.Add(new DisplayRowControl { Display = display });
+            DisplayItems.Items.Add(new DisplayRowControl
+            {
+                Display = display,
+                SlidersEnabled = !_settings.SyncMonitors
+            });
+        }
+    }
+
+    private void UpdateRowSliderStates()
+    {
+        foreach (var row in DisplayItems.Items.OfType<DisplayRowControl>())
+        {
+            row.SlidersEnabled = !_settings.SyncMonitors;
         }
     }
 
@@ -239,6 +251,7 @@ public sealed partial class OsdWindow : Window
             _settings.SyncMonitors = on;
         }
 
+        UpdateRowSliderStates();
         if (on)
         {
             _displays?.SynchronizeAll();
@@ -249,6 +262,7 @@ public sealed partial class OsdWindow : Window
     public void SyncToggleState()
     {
         SyncToggle.IsOn = _settings.SyncMonitors;
+        UpdateRowSliderStates();
     }
 
     #endregion
