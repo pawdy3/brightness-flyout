@@ -5,8 +5,6 @@ namespace BrightFlyout.Services;
 /// <summary>
 /// Minimal, dependency-free tray icon: a message-only window + Shell_NotifyIcon
 /// (uID-based registration, no GUID table involvement) + a native popup menu.
-/// Replaces H.NotifyIcon, whose Shell_NotifyIcon calls were persistently rejected
-/// on Windows 10 22H2 with no error information.
 /// </summary>
 internal sealed class TrayIconService : IDisposable
 {

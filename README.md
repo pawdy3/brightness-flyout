@@ -143,7 +143,8 @@ dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:PublishAot=true -p:Enabl
 dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=true `
   -p:EnableMsixTooling=true -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
 
-# hybrid MSIX -> AppPackages\..._x64_Test\ (wipe that dir first if you built AOT into it)
+# hybrid MSIX -> AppPackages\..._x64_Test\
+# IMPORTANT: wipe bin/obj first if you published the AOT variant before (see "Release builds" above)
 dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=false `
   -p:SelfContained=true -p:PublishTrimmed=true `
   -p:EnableMsixTooling=true -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never

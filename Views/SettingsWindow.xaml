@@ -41,8 +41,7 @@
                     CornerRadius="8">
                     <StackPanel Spacing="8">
                         <TextBlock FontWeight="SemiBold" Text="Displays" />
-                        <!-- Rows (DisplaySettingsRow) are added to Items in code:
-                             managed collections via ItemsSource break under NativeAOT. -->
+                        <!-- Rows (DisplaySettingsRow) are added to Items in code; see DisplayRowControl. -->
                         <ItemsControl x:Name="DisplayStatusItems" />
                         <TextBlock
                             x:Name="NoDisplaysText"

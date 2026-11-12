@@ -19,6 +19,7 @@ public sealed partial class SettingsWindow : Window
     private readonly SettingsService _settings;
     private readonly IntPtr _hwnd;
     private readonly AppWindow _appWindow;
+    private readonly List<string> _defaultMonitorIds = [];
     private bool _initializing = true;
     private bool _sliderUpdating;
 
@@ -64,8 +65,8 @@ public sealed partial class SettingsWindow : Window
         PlacementComboBox.SelectedIndex = (int)_settings.OsdPlacement;
         BackgroundComboBox.SelectedIndex = (int)_settings.BackgroundStyle;
         FillComboBox.SelectedIndex = (int)_settings.FillStyle;
-        BackgroundColorPicker.Color = ParseColorOrDefault(_settings.CustomBackgroundColor, Color.FromArgb(0xE6, 0x1F, 0x1F, 0x1F));
-        FillColorPicker.Color = ParseColorOrDefault(_settings.CustomFillColor, Color.FromArgb(0xFF, 0xF5, 0xC5, 0x42));
+        BackgroundColorPicker.Color = ColorHex.ParseOrDefault(_settings.CustomBackgroundColor, Color.FromArgb(0xE6, 0x1F, 0x1F, 0x1F));
+        FillColorPicker.Color = ColorHex.ParseOrDefault(_settings.CustomFillColor, Color.FromArgb(0xFF, 0xF5, 0xC5, 0x42));
         PercentToggle.IsOn = _settings.ShowPercentText;
         MultiMonitorToggle.IsOn = _settings.MultiMonitorEnabled;
         UpdateColorPickerVisibility();
@@ -77,8 +78,6 @@ public sealed partial class SettingsWindow : Window
 
         ApplyTheme();
     }
-
-    private readonly List<string> _defaultMonitorIds = [];
 
     // NativeAOT: rows are UserControls added to Items in code; the combo holds
     // display names with a parallel id list. No managed collections cross the ABI.
@@ -256,7 +255,7 @@ public sealed partial class SettingsWindow : Window
     {
         if (!_initializing)
         {
-            _settings.CustomBackgroundColor = ToHex(args.NewColor);
+            _settings.CustomBackgroundColor = ColorHex.ToHex(args.NewColor);
         }
     }
 
@@ -264,7 +263,7 @@ public sealed partial class SettingsWindow : Window
     {
         if (!_initializing)
         {
-            _settings.CustomFillColor = ToHex(args.NewColor);
+            _settings.CustomFillColor = ColorHex.ToHex(args.NewColor);
         }
     }
 
@@ -307,33 +306,6 @@ public sealed partial class SettingsWindow : Window
         _app.Controller.BrightnessChanged -= OnBrightnessChanged;
         _app.Controller.Displays.Changed -= OnDisplaysChanged;
         _app.OnSettingsWindowClosed();
-    }
-
-    private static string ToHex(Color c) => $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}";
-
-    private static Color ParseColorOrDefault(string text, Color fallback)
-    {
-        try
-        {
-            var hex = text.Trim().TrimStart('#');
-            if (hex.Length == 8)
-            {
-                var v = Convert.ToUInt32(hex, 16);
-                return Color.FromArgb((byte)(v >> 24), (byte)(v >> 16), (byte)(v >> 8), (byte)v);
-            }
-
-            if (hex.Length == 6)
-            {
-                var v = Convert.ToUInt32(hex, 16);
-                return Color.FromArgb(255, (byte)(v >> 16), (byte)(v >> 8), (byte)v);
-            }
-        }
-        catch
-        {
-            // fall through
-        }
-
-        return fallback;
     }
 
     private static bool IsStartupEnabled()

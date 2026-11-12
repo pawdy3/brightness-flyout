@@ -66,7 +66,6 @@ internal static class NativeOsdSuppressor
             return true; // already hidden
         }
 
-
         // Walk the XAML islands; FindWindowEx must be given the previous handle as
         // hwndChildAfter, otherwise it returns the same first island forever.
         IntPtr hwndXamlIsland = IntPtr.Zero;

@@ -4,7 +4,7 @@ namespace BrightFlyout.Native;
 
 /// <summary>
 /// Minimal Win32 surface required by the app. Everything else is handled by
-/// WinUI 3 / Windows App SDK / H.NotifyIcon.
+/// WinUI 3 / the Windows App SDK.
 /// </summary>
 internal static class NativeMethods
 {
@@ -226,11 +226,7 @@ internal static class NativeMethods
     public const int WM_USER = 0x0400;
     public const int WM_NULL = 0x0000;
     public const int WM_LBUTTONDBLCLK = 0x0203;
-    public const int WM_LBUTTONUP = 0x0202;
     public const int WM_RBUTTONUP = 0x0205;
-    public const int WM_CONTEXTMENU = 0x007B;
-    public const int WM_COMMAND = 0x0111;
-    public const int WM_DESTROY = 0x0002;
 
     public const int NIM_ADD = 0x0;
     public const int NIM_MODIFY = 0x1;
@@ -241,7 +237,6 @@ internal static class NativeMethods
     public const int NIF_ICON = 0x2;
     public const int NIF_TIP = 0x4;
     public const int NIF_INFO = 0x10;
-    public const int NIF_GUID = 0x20;
 
     public const int NIIF_INFO = 0x1;
 

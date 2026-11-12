@@ -60,7 +60,7 @@ jobs:
           -p:AppxPackageDir=out\aot\
 
       # The two variants must not share intermediate state: switching PublishAot
-      # on the same obj/bin has produced corrupted packages locally. Full reset.
+      # on the same obj/bin corrupts the second package. Full reset.
       - name: Clean intermediates between variants
         shell: pwsh
         run: |

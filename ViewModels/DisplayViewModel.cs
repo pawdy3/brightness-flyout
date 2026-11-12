@@ -43,7 +43,7 @@ public partial class DisplayViewModel : ObservableObject
 
     partial void OnIsIncludedChanged(bool value) => _includeChanged(this, value);
 
-    // x:Bind in a Window DataTemplate can't use value converters, hence a property.
+    // Exposed as a property so row XAML needs no value converter.
     public Visibility TargetMarkerVisibility => IsTarget ? Visibility.Visible : Visibility.Collapsed;
 
     partial void OnIsTargetChanged(bool value) => OnPropertyChanged(nameof(TargetMarkerVisibility));

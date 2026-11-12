@@ -80,21 +80,28 @@ internal sealed class DdcCiDisplayController : IDisplayController
         var all = EnumerateAll();
         try
         {
-            // NOTE: hPhysicalMonitor can legitimately be zero on some systems -
-            // zero is a valid handle here, not a "no match" sentinel.
-            var match = all.FirstOrDefault(m =>
-                m.DeviceName == _deviceName &&
-                m.Monitor.szPhysicalMonitorDescription == _description);
-            bool found = all.Any(m =>
-                m.DeviceName == _deviceName &&
-                m.Monitor.szPhysicalMonitorDescription == _description);
+            // NOTE: hPhysicalMonitor can legitimately be zero - zero is a valid
+            // handle here, not a "no match" sentinel. Use an explicit loop.
+            IntPtr handle = IntPtr.Zero;
+            var found = false;
+            foreach (var m in all)
+            {
+                if (m.DeviceName == _deviceName
+                    && m.Monitor.szPhysicalMonitorDescription == _description)
+                {
+                    handle = m.Monitor.hPhysicalMonitor;
+                    found = true;
+                    break;
+                }
+            }
+
             if (!found)
             {
                 IsAvailable = false;
                 return default;
             }
 
-            var (ok, value) = operation(match.Monitor.hPhysicalMonitor);
+            var (ok, value) = operation(handle);
             IsAvailable = ok;
             return ok ? value : default;
         }

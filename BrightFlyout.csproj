@@ -18,9 +18,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <!-- English-only by design (no .resw, all UI strings are literals), so no
-         satellite assemblies. NOTE: InvariantGlobalization was tried and
-         reverted - the NativeAOT build silently dies under it (XAML framework
-         depends on the culture machinery). -->
+         satellite assemblies. InvariantGlobalization is NOT an option: the XAML
+         framework resolves the host culture when a window is first shown and
+         throws CultureNotFoundException under invariant mode. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 

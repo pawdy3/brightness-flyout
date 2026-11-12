@@ -22,8 +22,13 @@ public sealed partial class OsdWindow : Window
 {
     private const double WidthDip = 360;
     private const double CollapsedHeightDip = 48;
-    private const double RowHeightDip = 34;
     private const double BottomMarginDip = 24;
+
+    // Expanded-panel layout: per-display rows, then the sync toggle row, padded.
+    private const double RowHeightDip = 34;
+    private const double RowSpacingDip = 4;
+    private const double SyncRowHeightDip = 32;
+    private const double ExpandedPaddingDip = 14;
 
     private readonly SettingsService _settings;
     private readonly DispatcherQueueTimer _hideTimer;
@@ -32,6 +37,7 @@ public sealed partial class OsdWindow : Window
 
     private readonly RectInt32 _workArea;
     private DisplayManager? _displays;
+    private string _rowsFingerprint = string.Empty;
     private bool _isDark = true;
     private bool _acrylicAvailable = true;
     private bool _isExpanded;
@@ -125,8 +131,6 @@ public sealed partial class OsdWindow : Window
     // Rows are DisplayRowControl UserControls added to ItemsControl.Items in code:
     // passing managed collections via ItemsSource crosses the WinRT ABI and breaks
     // NativeAOT, while adding UI elements is safe. Row content stays declarative.
-    private string _rowsFingerprint = string.Empty;
-
     private void RebuildDisplayRows()
     {
         var fingerprint = _displays is null
@@ -193,7 +197,6 @@ public sealed partial class OsdWindow : Window
         FillScale.ScaleX = value / 100.0;
         PercentText.Text = $"{value}%";
     }
-
 
     #region Expand / collapse
 
@@ -285,8 +288,7 @@ public sealed partial class OsdWindow : Window
         if (_isExpanded)
         {
             int rows = _displays?.Displays.Count ?? 0;
-            // rows + spacing + sync button + its margin + panel padding
-            heightDip += rows * (RowHeightDip + 4) + 32 + 4 + 10;
+            heightDip += rows * (RowHeightDip + RowSpacingDip) + SyncRowHeightDip + ExpandedPaddingDip;
         }
 
         int height = (int)Math.Round(heightDip * scale);
@@ -323,66 +325,27 @@ public sealed partial class OsdWindow : Window
         Panel.BorderThickness = new Thickness(0);
         Panel.BorderBrush = new SolidColorBrush(Colors.Transparent);
 
-        var track = _isDark ? Color.FromArgb(0x26, 255, 255, 255) : Color.FromArgb(0x26, 0, 0, 0);
-        var accent = (Color)Application.Current.Resources["SystemAccentColor"];
+        TrackBar.Background = new SolidColorBrush(
+            _isDark ? Color.FromArgb(0x26, 255, 255, 255) : Color.FromArgb(0x26, 0, 0, 0));
 
-        TrackBar.Background = new SolidColorBrush(track);
+        // Without an acrylic backdrop the panel must be opaque; with acrylic the
+        // default background is transparent so the backdrop shows through.
+        var fallbackBackground = _acrylicAvailable
+            ? Colors.Transparent
+            : _isDark ? Color.FromArgb(0xFF, 0x1F, 0x1F, 0x1F) : Color.FromArgb(0xFF, 0xF9, 0xF9, 0xF9);
 
-        if (!_acrylicAvailable)
-        {
-            // No backdrop on this system: always use an opaque background.
-            Panel.Background = TryParseColor(_settings.CustomBackgroundColor, out var custom)
-                && _settings.BackgroundStyle == OsdBackgroundStyle.SolidColor
-                    ? new SolidColorBrush(custom)
-                    : new SolidColorBrush(_isDark ? Color.FromArgb(0xFF, 0x1F, 0x1F, 0x1F) : Color.FromArgb(0xFF, 0xF9, 0xF9, 0xF9));
-        }
-        else
-        {
-            Panel.Background = _settings.BackgroundStyle == OsdBackgroundStyle.SolidColor
-                && TryParseColor(_settings.CustomBackgroundColor, out var background)
-                    ? new SolidColorBrush(background)
-                    : new SolidColorBrush(Colors.Transparent);
-        }
+        Panel.Background = _settings.BackgroundStyle == OsdBackgroundStyle.SolidColor
+            ? new SolidColorBrush(ColorHex.ParseOrDefault(_settings.CustomBackgroundColor, fallbackBackground))
+            : new SolidColorBrush(fallbackBackground);
 
-        FillBar.Background = _settings.FillStyle == OsdFillStyle.CustomColor
-            && TryParseColor(_settings.CustomFillColor, out var fill)
-                ? new SolidColorBrush(fill)
-                : new SolidColorBrush(accent);
+        FillBar.Background = new SolidColorBrush(
+            _settings.FillStyle == OsdFillStyle.CustomColor
+                ? ColorHex.ParseOrDefault(_settings.CustomFillColor, SystemAccent)
+                : SystemAccent);
 
         PercentText.Visibility = _settings.ShowPercentText ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private static bool TryParseColor(string text, out Color color)
-    {
-        color = default;
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return false;
-        }
-
-        text = text.Trim().TrimStart('#');
-        try
-        {
-            if (text.Length == 8) // AARRGGBB
-            {
-                var value = Convert.ToUInt32(text, 16);
-                color = Color.FromArgb(
-                    (byte)(value >> 24), (byte)(value >> 16), (byte)(value >> 8), (byte)value);
-                return true;
-            }
-
-            if (text.Length == 6) // RRGGBB
-            {
-                var value = Convert.ToUInt32(text, 16);
-                color = Color.FromArgb(255, (byte)(value >> 16), (byte)(value >> 8), (byte)value);
-                return true;
-            }
-        }
-        catch
-        {
-            // fall through
-        }
-
-        return false;
-    }
+    private static Color SystemAccent =>
+        (Color)Application.Current.Resources["SystemAccentColor"];
 }
