@@ -160,29 +160,23 @@ public partial class SettingsService : ObservableObject
         {
             if (File.Exists(AppPaths.SettingsFile))
             {
-                var json = File.ReadAllText(AppPaths.SettingsFile);
-                var loaded = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.SettingsService);
+                // Copy via the source-generated metadata (AOT-safe delegates,
+                // no reflection): new settings never need a Load() line again.
+                // Setters fire PropertyChanged, but saves are still suppressed
+                // until the finally block.
+                var typeInfo = SettingsJsonContext.Default.SettingsService;
+                var loaded = JsonSerializer.Deserialize(File.ReadAllText(AppPaths.SettingsFile), typeInfo);
                 if (loaded is not null)
                 {
-                    BrightnessStep = loaded.BrightnessStep;
-                    OsdDurationMs = loaded.OsdDurationMs;
-                    RunAtStartup = loaded.RunAtStartup;
-                    EnableRawInput = loaded.EnableRawInput;
-                    BrightnessDownVk = loaded.BrightnessDownVk;
-                    BrightnessUpVk = loaded.BrightnessUpVk;
-                    Theme = loaded.Theme;
-                    BackgroundStyle = loaded.BackgroundStyle;
-                    CustomBackgroundColor = loaded.CustomBackgroundColor;
-                    FillStyle = loaded.FillStyle;
-                    CustomFillColor = loaded.CustomFillColor;
-                    ShowPercentText = loaded.ShowPercentText;
-                    ClickableFlyoutBar = loaded.ClickableFlyoutBar;
-                    MultiMonitorEnabled = loaded.MultiMonitorEnabled;
-                    DefaultMonitorId = loaded.DefaultMonitorId;
-                    ExcludedMonitorIds = loaded.ExcludedMonitorIds ?? [];
-                    SyncMonitors = loaded.SyncMonitors;
-                    OsdPlacement = loaded.OsdPlacement;
-                    LastNotifiedVersion = loaded.LastNotifiedVersion;
+                    foreach (var property in typeInfo.Properties)
+                    {
+                        if (property is { Get: not null, Set: not null })
+                        {
+                            property.Set(this, property.Get(loaded));
+                        }
+                    }
+
+                    ExcludedMonitorIds ??= [];
                 }
             }
         }

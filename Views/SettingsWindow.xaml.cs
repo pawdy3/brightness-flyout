@@ -30,6 +30,10 @@ public sealed partial class SettingsWindow : Window
     private string VersionText { get; } =
         $"BrightFlyout {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "?"}";
 
+    /// <summary>x:Bind source for the plain settings toggles (observable settings
+    /// object; the PropertyChanged plumbing is already in place).</summary>
+    public SettingsService Settings => _settings;
+
     public SettingsWindow(App app)
     {
         _app = app;
@@ -69,7 +73,6 @@ public sealed partial class SettingsWindow : Window
         StepNumberBox.Value = _settings.BrightnessStep;
         DurationNumberBox.Value = _settings.OsdDurationMs / 1000.0;
         StartupToggle.IsOn = IsStartupEnabled();
-        RawInputToggle.IsOn = _settings.EnableRawInput;
         VkDownTextBox.Text = _settings.BrightnessDownVk;
         VkUpTextBox.Text = _settings.BrightnessUpVk;
         ThemeComboBox.SelectedIndex = (int)_settings.Theme;
@@ -78,9 +81,6 @@ public sealed partial class SettingsWindow : Window
         FillComboBox.SelectedIndex = (int)_settings.FillStyle;
         BackgroundColorPicker.Color = ColorHex.ParseOrDefault(_settings.CustomBackgroundColor, Color.FromArgb(0xE6, 0x1F, 0x1F, 0x1F));
         FillColorPicker.Color = ColorHex.ParseOrDefault(_settings.CustomFillColor, Color.FromArgb(0xFF, 0xF5, 0xC5, 0x42));
-        PercentToggle.IsOn = _settings.ShowPercentText;
-        ClickableBarToggle.IsOn = _settings.ClickableFlyoutBar;
-        MultiMonitorToggle.IsOn = _settings.MultiMonitorEnabled;
         UpdateColorPickerVisibility();
 
         if (_app.Controller.Displays.Target is { } target)
@@ -185,14 +185,6 @@ public sealed partial class SettingsWindow : Window
         }
     }
 
-    private void OnMultiMonitorToggled(object sender, RoutedEventArgs e)
-    {
-        if (!_initializing)
-        {
-            _settings.MultiMonitorEnabled = MultiMonitorToggle.IsOn;
-        }
-    }
-
     private void OnDefaultMonitorChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_initializing
@@ -225,14 +217,6 @@ public sealed partial class SettingsWindow : Window
         {
             SetStartupEnabled(StartupToggle.IsOn);
             _settings.RunAtStartup = StartupToggle.IsOn;
-        }
-    }
-
-    private void OnRawInputToggled(object sender, RoutedEventArgs e)
-    {
-        if (!_initializing)
-        {
-            _settings.EnableRawInput = RawInputToggle.IsOn;
         }
     }
 
@@ -319,22 +303,6 @@ public sealed partial class SettingsWindow : Window
         finally
         {
             RefreshDisplaysButton.IsEnabled = true;
-        }
-    }
-
-    private void OnPercentToggled(object sender, RoutedEventArgs e)
-    {
-        if (!_initializing)
-        {
-            _settings.ShowPercentText = PercentToggle.IsOn;
-        }
-    }
-
-    private void OnClickableBarToggled(object sender, RoutedEventArgs e)
-    {
-        if (!_initializing)
-        {
-            _settings.ClickableFlyoutBar = ClickableBarToggle.IsOn;
         }
     }
 

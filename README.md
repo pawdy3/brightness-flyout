@@ -1,61 +1,101 @@
 # BrightFlyout
 
-A WinUI 3 tray app that controls **external monitor brightness over DDC/CI** with the
-keyboard brightness keys, and shows its own Windows-11-style OSD instead of the
-built-in one.
+Control your monitor brightness with the keyboard, with a proper flyout —
+including external monitors that Windows itself can't adjust.
 
-## Features
+BrightFlyout is a small Windows tray app (WinUI 3) that turns your keyboard's
+brightness keys into a universal brightness control: it drives external monitors
+over **DDC/CI** and laptop panels through the built-in Windows interface, and
+replaces the plain built-in popup with its own Windows-11-style flyout.
 
-- **Multi-transport display control**: external monitors via DDC/CI (VCP code `0x10`),
-  internal laptop panels via WMI (`WmiMonitorBrightnessMethods`) — each display is
-  probed at startup and paired with the transport that answers. Writes are coalesced,
-  so rapid key presses never queue slow DDC transactions.
-- **Multi-display mode** (off by default): the flyout gains an expand arrow listing
-  one slider per display plus a *Synchronize all displays* toggle. The keyboard
-  controls the display whose slider was touched last (or the default display chosen
-  in Settings at startup). Individual displays can be excluded from control in
-  Settings, and the flyout can appear on the primary display or on all displays.
-  Hot-plugged displays are picked up automatically (WM_DISPLAYCHANGE, debounced);
-  Settings also has an explicit refresh button.
-- **Laptop support**: on mobile systems Windows consumes the brightness keys itself;
-  a `WmiMonitorBrightnessEvent` watcher mirrors those changes into our OSD (and to
-  all included displays when sync is on). If the internal panel is **excluded** from
-  control, Windows' own changes to it are reverted (debounced per key-press burst)
-  and the keys drive your other displays instead.
-- **Clickable flyout bar** (on by default): click or drag the collapsed bar to set
-  brightness directly; per-display sliders are disabled while sync is on.
-- **Windows 10**: icon fonts fall back to Segoe MDL2 Assets, and the native OSD is
-  suppressed via the legacy `NativeHWNDHost` host window.
-- **Keyboard input detection**, two complementary paths:
-  - `WH_KEYBOARD_LL` low-level hook with configurable virtual-key codes
-    (matching keys are swallowed before the shell sees them), and
-  - **Raw Input** on HID consumer page `0x0C` for the standardized
-    *Display Brightness Increment/Decrement* usages `0x006F` / `0x0070` —
-    these never surface as virtual keys, so this is the path that makes real
-    brightness keys work. Held keys auto-repeat.
-- **Custom OSD** replicating the Windows 11 flyout: borderless, always-on-top,
-  non-activatable, acrylic-backed pill anchored bottom-center above the taskbar,
-  with a percentage readout (can be hidden in Settings).
-- **Transient native OSD suppression**: while the custom OSD is shown, the built-in
-  shell OSD (the `XamlExplorerHostIslandWindow` XAML island) is hidden using the
-  FluentFlyout/HideVolumeOSD technique — but only for the duration of the OSD, and
-  always restored on timeout and on app exit. Volume OSD etc. are unaffected
-  outside that window.
-- **System tray** with Settings / Exit context menu.
-- **Settings window**: four NavigationView pages (Displays / Flyout / Keyboard /
-  General) built with CommunityToolkit SettingsControls - display inclusion and
-  default target, theme (System/Light/Dark), flyout background (acrylic or custom
-  color), bar fill (system accent or custom color), percentage readout, clickable
-  bar, brightness step, OSD duration, run-at-startup, and the keyboard input
-  options (HID Raw Input on by default; low-level hook VK codes behind an
-  "Advanced" expander). Persisted to `%LOCALAPPDATA%\BrightFlyout\settings.json`.
+![BrightFlyout flyout](docs/screenshots/osd-collapsed.png)
 
-## Build & run
+## What it does
+
+- **External monitor brightness from the keyboard.** Sends DDC/CI commands
+  (VCP `0x10`) to any monitor that supports them — most do. Rapid key presses
+  are coalesced so your monitor never chokes on slow I2C transactions.
+- **Laptop panels too.** Internal displays are driven through Windows' own WMI
+  brightness interface, so one app covers your whole setup. On laptops, where
+  Windows insists on handling the keys itself, BrightFlyout mirrors the change
+  into its flyout — and if the panel isn't your keyboard target, it instantly
+  reverts Windows' change and drives your chosen display instead.
+- **Works with real brightness keys.** Standard keyboards report brightness as
+  HID consumer-control usages (`0x006F`/`0x0070`), which normal hotkey APIs
+  can't see. BrightFlyout listens via Raw Input, so those keys just work —
+  including hold-to-repeat. A low-level keyboard hook with configurable
+  virtual-key codes covers exotic keyboards.
+- **A flyout that looks like it belongs.** A faithful Windows 11 OSD replica:
+  acrylic, rounded, above the taskbar, with a percentage readout. The built-in
+  Windows OSD is suppressed only while ours is visible and always restored
+  afterwards — volume and other system flyouts are unaffected.
+- **Multi-display aware.** Expand the flyout for one slider per display, sync
+  all displays together, pick which display the keys control, and exclude
+  displays you don't want touched. Monitors are hot-plug and input-switch
+  tolerant — changes are picked up automatically.
+
+![Expanded flyout with per-display sliders](docs/screenshots/osd-expanded.png)
+
+- **Styleable.** System theme by default (light/dark follows Windows), with
+  optional custom background and bar colors, adjustable brightness step and
+  flyout duration, and the choice of showing the flyout on your primary
+  display or all of them.
+- **Quiet and unobtrusive.** Lives in the system tray (right-click for
+  Settings, Refresh displays, Exit; double-click opens Settings). Optionally
+  starts with Windows. Notifies you once when a new release is out.
+- **Windows 10 and 11**, x64.
+
+## Install
+
+1. Download `BrightFlyout_AOT_x64.msix`, `BrightFlyout.cer` and
+   `Install-BrightFlyout.ps1` from the latest
+   [release](https://github.com/pawdy3/brightness-flyout/releases) into one
+   folder.
+2. Run the script:
+
+   ```powershell
+   .\Install-BrightFlyout.ps1
+   ```
+
+   It trusts the self-signed certificate once per machine (the only step that
+   asks for admin), closes a running instance, and handles upgrades,
+   downgrades and same-version rebuilds. If the app was running, it is
+   started again afterwards.
+
+Upgrades are in-place and keep your settings
+(`%LOCALAPPDATA%\BrightFlyout\settings.json`). Uninstall via
+*Settings → Apps* like any other app.
+
+> First install pulls the Windows App SDK runtime from the Microsoft Store
+> automatically (one-time, needs network + Store access).
+
+## Settings
+
+Right-click the tray icon → **Settings**. Four pages: **Displays** (inclusion,
+keyboard target, default display), **Flyout** (theme, position, colors,
+percentage readout, clickable bar — you can click or drag the bar itself),
+**Keyboard** (Raw Input toggle, advanced VK codes), **General** (brightness
+step, flyout duration, run at startup).
+
+![Settings - Displays](docs/screenshots/settings-displays.png)
+
+![Settings - Flyout](docs/screenshots/settings-flyout.png)
+
+## For developers
+
+### Prerequisites
+
+- .NET 10 SDK
+- Windows App SDK 2.6 runtime (unpackaged dev builds bootstrap against it;
+  if the app fails to start with a missing-runtime error, install any released
+  MSIX once or run `windowsappruntimeinstall-x64.exe` from the
+  [Windows App SDK downloads](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads))
+- MSVC C++ build tools (only for NativeAOT release builds)
 
 ### Development inner loop
 
-Day-to-day development does **not** need the MSIX machinery (packaging, signing,
-AOT) - that is for releases only. Use the dev script:
+Day-to-day development does **not** need the MSIX machinery (packaging,
+signing, AOT) — that is for releases only:
 
 ```powershell
 .\tools\dev-run.ps1                    # kill running instance, Debug build, launch
@@ -67,19 +107,11 @@ AOT) - that is for releases only. Use the dev script:
 Plain `dotnet` equivalent: `dotnet build -c Debug -p:Platform=x64 -r win-x64`,
 exe lands in `bin\x64\Debug\net10.0-windows10.0.19041.0\win-x64\`.
 
-Requires: .NET 10 SDK, and the **Windows App SDK 2.6 runtime** installed once
-(unpackaged dev builds bootstrap against it). If the app fails to start with a
-missing-runtime error, either install any released MSIX once (it pulls the
-runtime from the Store) or run `windowsappruntimeinstall-x64.exe` from the
-[Windows App SDK downloads](https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads).
-
 Other dev affordances:
 
-- Diagnostics go to `%LOCALAPPDATA%\BrightFlyout\debug.log` (bounded, 256 KB).
-- `BrightFlyout.exe --open-settings` opens the settings window at startup
-  (test hook; also works on installed MSIX builds via their exe path).
-- The app lives in the system tray (sun icon). Right-click → **Settings**,
-  double-click opens Settings directly.
+- Diagnostics go to `%LOCALAPPDATA%\BrightFlyout\debug.log` (bounded, 256 KB;
+  the file stays movable/copyable while the app runs).
+- `BrightFlyout.exe --open-settings` opens the settings window at startup.
 
 ### Integration tests
 
@@ -90,7 +122,7 @@ Other dev affordances:
 
 The suite runs the real app against **simulated in-memory displays**, so no
 DDC/CI hardware is needed. Covered: cold start (hook, display detection),
-single-instance mutex, keyboard injection -> brightness step -> OSD (verified
+single-instance behavior, keyboard injection → brightness step → OSD (verified
 by screenshot diff), OSD auto-hide, tray icon registration, settings window.
 Any already-running BrightFlyout instance is killed first.
 
@@ -107,13 +139,6 @@ directory is kept at `%TEMP%\BrightFlyoutIntegrationTests` for inspection.
 
 ### Release builds
 
-The two MSIX variants and their sizes are listed under
-[Distribution](#distribution). When publishing both variants locally, wipe
-`bin`/`obj` between them - switching `PublishAot` on shared intermediates has
-produced corrupted packages.
-
-## Distribution
-
 CI (`.github/workflows/build.yml`) produces two MSIX packages on every push,
 and attaches them to a GitHub Release when a `v*` tag is pushed:
 
@@ -123,41 +148,38 @@ and attaches them to a GitHub Release when a `v*` tag is pushed:
 | `BrightFlyout_Hybrid_x64.msix` | ~11 MB | regular build + trimmed .NET 10 runtime (fallback variant) |
 
 (A framework-dependent variant was evaluated and dropped: it still needs ~9 MB
-of WASDK managed projections in the package - MSIX framework packages share
-native code only - and trimming requires self-contained, so it would barely
+of WASDK managed projections in the package — MSIX framework packages share
+native code only — and trimming requires self-contained, so it would barely
 beat the hybrid while adding a .NET runtime requirement.)
 
-Both pull the Windows App SDK 2.6 automatically as a framework package from the
-Microsoft Store during install (one-time, needs network + Store access), and
-both are proper installers: Start Menu entry, Settings > Apps uninstall, and
-in-place upgrades (installing a newer `.msix` upgrades the app and keeps
-settings). Pick AOT; the hybrid variant exists as a fallback.
+Both pull the Windows App SDK 2.6 automatically as a framework package from
+the Microsoft Store at install. Pick AOT; the hybrid variant exists as a
+fallback.
 
-### Installing / upgrading
-
-Download the `.msix`, `BrightFlyout.cer` and `Install-BrightFlyout.ps1` into one
-folder, then run the script:
+Local equivalents (MSIX variants sign with `certs\BrightFlyout.pfx`
+automatically if present; when publishing both, wipe `bin`/`obj` between them —
+switching `PublishAot` on shared intermediates has produced corrupted
+packages):
 
 ```powershell
-.\Install-BrightFlyout.ps1
+# portable NativeAOT single exe, no installer, zero prerequisites
+# (self-contained Windows App SDK - unpackaged apps can't pull it from the Store)
+dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:PublishAot=true `
+  -p:WindowsAppSDKSelfContained=true
+
+# AOT MSIX -> AppPackages\..._x64_Test\
+dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=true
+
+# hybrid MSIX -> AppPackages\..._x64_Test\
+dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=false `
+  -p:SelfContained=true -p:PublishTrimmed=true
 ```
-
-The script handles the awkward parts of raw MSIX deployment: it trusts the
-self-signed cert once per machine (elevating only for the cert import — without
-this, installs fail with `0x800B0109`), closes a running app instance (avoids
-`0x80073D02`), and replaces same-version rebuilds (avoids `0x80073CFB`), so
-iterating does not require version bumps. Upgrades otherwise happen in place
-and keep settings.
-
-Manual equivalent if you prefer: trust the cert once
-(`Import-Certificate ... Cert:\LocalMachine\TrustedPeople`, elevated), then
-`Add-AppxPackage .\BrightFlyout_*.msix`.
 
 ### Releasing
 
 ```powershell
-git tag v1.0.3
-git push origin v1.0.3
+git tag v2.0.1
+git push origin v2.0.1
 ```
 
 CI signs the MSIX with the stable cert from the **`MSIX_CERT_PFX_BASE64`**
@@ -168,30 +190,10 @@ repository secret (base64 of `certs\BrightFlyout.pfx`):
 # -> GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret
 ```
 
-Keep `certs\` private (gitignored) and back it up - a new cert means every
+Keep `certs\` private (gitignored) and back it up — a new cert means every
 machine has to trust it again before upgrading. The cert is valid until 2051.
-
-Local equivalents (both need MSVC C++ build tools for AOT; MSIX signing uses
-`certs\BrightFlyout.pfx` automatically if present):
-
-```powershell
-# portable NativeAOT single exe, no installer, zero prerequisites
-# (self-contained Windows App SDK - unpackaged apps can't pull it from the Store)
-dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:PublishAot=true -p:EnableMsixTooling=true `
-  -p:WindowsAppSDKSelfContained=true
-
-# AOT MSIX -> AppPackages\..._x64_Test\
-dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=true `
-  -p:EnableMsixTooling=true -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
-
-# hybrid MSIX -> AppPackages\..._x64_Test\
-# IMPORTANT: wipe bin/obj first if you published the AOT variant before (see "Release builds" above)
-dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=false `
-  -p:SelfContained=true -p:PublishTrimmed=true `
-  -p:EnableMsixTooling=true -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
-```
 
 ## Notes
 
-- If your keyboard emits actual virtual-key codes for brightness instead of HID
-  consumer usages, set them (hex) under *Settings → Keyboard input*.
+- If your keyboard emits actual virtual-key codes for brightness instead of
+  HID consumer usages, set them (hex) under *Settings → Keyboard*.
