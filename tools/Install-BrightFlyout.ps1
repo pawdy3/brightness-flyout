@@ -89,4 +89,13 @@ try {
 $pkg = Get-AppxPackage -Name BrightFlyout
 Write-Host ''
 Write-Host "BrightFlyout $($pkg.Version) installed." -ForegroundColor Green
-Write-Host 'Start it from the Start Menu, or: Start-Process "shell:AppsFolder\BrightFlyout_g4arpm9m7tzqp!App"'
+
+if ($running) {
+    # We closed a running instance for the install - start the new one again.
+    Write-Step 'Restarting BrightFlyout...'
+    $appId = (Get-StartApps | Where-Object Name -eq 'BrightFlyout' | Select-Object -First 1).AppID
+    if (-not $appId) { $appId = "$($pkg.PackageFamilyName)!App" }
+    Start-Process "shell:AppsFolder\$appId"
+} else {
+    Write-Host "Start it from the Start Menu, or: Start-Process `"shell:AppsFolder\$($pkg.PackageFamilyName)!App`""
+}
