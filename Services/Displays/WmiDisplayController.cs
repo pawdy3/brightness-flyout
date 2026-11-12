@@ -105,9 +105,12 @@ internal sealed class WmiDisplayController : IDisplayController
                 }
 
                 // WmiSetBrightness(timeoutSeconds, brightnessPercent)
+                // NOTE: WBEM's in-params Put rejects VT_UI4 for the CIM uint32
+                // Timeout (WBEM_E_TYPE_MISMATCH) - it must go in as VT_I4 (int).
+                // Brightness is CIM uint8, which accepts VT_UI1 (byte).
                 using var method = methods.GetMethod("WmiSetBrightness");
                 using var parameters = method.CreateInParameters();
-                parameters.SetPropertyValue("Timeout", (uint)1);
+                parameters.SetPropertyValue("Timeout", 1);
                 parameters.SetPropertyValue("Brightness", (byte)percent);
                 methods.ExecuteMethod<uint>(method, parameters, out _);
                 IsAvailable = true;

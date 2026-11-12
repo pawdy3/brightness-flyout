@@ -37,16 +37,28 @@ public sealed class DisplayManager
     /// mode; falls back to the configured default, then to the first included display.</summary>
     public string? TargetId { get; private set; }
 
+    // True when the target was chosen implicitly (WMI mirror while the default
+    // display was away) rather than by the user; such a target returns to the
+    // default when it becomes available again.
+    private bool _targetIsAutomatic;
+
     public DisplayViewModel? Target =>
         IncludedDisplays.FirstOrDefault(d => d.Id == TargetId)
         ?? IncludedDisplays.FirstOrDefault(d => d.Id == _settings.DefaultMonitorId)
         ?? IncludedDisplays.FirstOrDefault();
 
-    public void SetTarget(string id)
+    public void SetTarget(string id, bool automatic = false)
     {
-        if (TargetId != id && Displays.Any(d => d.Id == id))
+        if (TargetId == id)
+        {
+            _targetIsAutomatic = automatic;
+            return;
+        }
+
+        if (Displays.Any(d => d.Id == id))
         {
             TargetId = id;
+            _targetIsAutomatic = automatic;
             UpdateTargetFlags();
             Changed?.Invoke();
         }
@@ -58,9 +70,26 @@ public sealed class DisplayManager
         var controllers = await Task.Run(EnumerateControllers);
         SyncCollection(controllers);
         await Task.WhenAll(Displays.Select(d => d.RefreshAsync()));
+        RestoreDefaultTargetIfBack();
         UpdateTargetFlags();
         Changed?.Invoke();
     }
+
+    /// <summary>An automatically chosen target (WMI mirror while the default display
+    /// was away) returns to the configured default once it is available again.</summary>
+    private void RestoreDefaultTargetIfBack()
+    {
+        if (_targetIsAutomatic
+            && _settings.DefaultMonitorId.Length > 0
+            && TargetId != _settings.DefaultMonitorId
+            && IncludedDisplays.Any(d => d.Id == _settings.DefaultMonitorId))
+        {
+            SetTarget(_settings.DefaultMonitorId);
+        }
+    }
+
+    // Enumeration runs on every poll tick; only log when the outcome changes.
+    private string _lastEnumerationReport = string.Empty;
 
     private List<IDisplayController> EnumerateControllers()
     {
@@ -74,6 +103,7 @@ public sealed class DisplayManager
         // every WMI brightness instance (internal panels). No pairing or phantom
         // filtering - duplicate/dead entries are accepted for now.
         var controllers = new List<IDisplayController>();
+        var silent = new List<string>();
 
         var physical = DdcCiDisplayController.EnumerateAll();
         try
@@ -95,7 +125,7 @@ public sealed class DisplayManager
                 }
                 else
                 {
-                    Log.Write($"Display '{description}' ({deviceName}) does not answer DDC/CI");
+                    silent.Add($"Display '{description}' ({deviceName}) does not answer DDC/CI");
                 }
             }
         }
@@ -110,7 +140,14 @@ public sealed class DisplayManager
             controllers.Add(new WmiDisplayController(instance));
         }
 
-        Log.Write($"Enumeration: {controllers.OfType<DdcCiDisplayController>().Count()} DDC/CI + {wmiInstances.Count} WMI display(s)");
+        var report = $"Enumeration: {controllers.OfType<DdcCiDisplayController>().Count()} DDC/CI + {wmiInstances.Count} WMI display(s)"
+            + (silent.Count > 0 ? "\n" + string.Join("\n", silent) : string.Empty);
+        if (report != _lastEnumerationReport)
+        {
+            _lastEnumerationReport = report;
+            Log.Write(report);
+        }
+
         return controllers;
     }
 

@@ -80,7 +80,7 @@ internal sealed class BrightnessController : IDisposable
         // Input-source switches and monitor sleep do not raise WM_DISPLAYCHANGE;
         // poll so dead/returned DDC links and externally-made changes surface.
         _pollTimer = _dispatcherQueue.CreateTimer();
-        _pollTimer.Interval = TimeSpan.FromSeconds(15);
+        _pollTimer.Interval = TimeSpan.FromSeconds(5);
         _pollTimer.Tick += (_, _) => _ = RefreshDisplaysAsync();
     }
 
@@ -262,7 +262,9 @@ internal sealed class BrightnessController : IDisposable
             }
 
             wmiDisplay.SetBrightnessSilently(value);
-            Displays.SetTarget(wmiDisplay.Id);
+            // Automatic target: returns to the configured default when that
+            // display becomes available again (e.g. monitor input switched back).
+            Displays.SetTarget(wmiDisplay.Id, automatic: true);
 
             if (_settings.SyncMonitors)
             {
