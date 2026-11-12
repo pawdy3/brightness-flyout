@@ -10,8 +10,7 @@ namespace BrightFlyout.Views;
 
 /// <summary>
 /// Owns the OSD window(s). Placement "Primary" keeps a single flyout on the primary
-/// display; "AllDisplays" shows one flyout per connected display. The first window
-/// also serves as the raw-input message target.
+/// display; "AllDisplays" shows one flyout per connected display.
 /// </summary>
 public sealed class OsdManager
 {
@@ -29,12 +28,6 @@ public sealed class OsdManager
         _settings = settings;
         EnsureWindows();
     }
-
-    /// <summary>HWND of the first OSD window (raw-input message target).</summary>
-    internal Windows.Win32.Foundation.HWND Hwnd => _windows[0].Hwnd;
-
-    /// <summary>DispatcherQueue of the first OSD window.</summary>
-    public Microsoft.UI.Dispatching.DispatcherQueue DispatcherQueue => _windows[0].DispatcherQueue;
 
     public void BindDisplays(DisplayManager displays)
     {

@@ -9,11 +9,12 @@ using BrightFlyout.ViewModels;
 namespace BrightFlyout.Services.Displays;
 
 /// <summary>
-/// Owns the set of controllable displays. Each physical monitor is probed for DDC/CI
-/// (VCP 0x10); displays that answer get a <see cref="DdcCiDisplayController"/>.
-/// Displays that don't answer are paired with WMI brightness instances (internal
-/// laptop panels) in enumeration order; displays that neither answer DDC/CI nor have
-/// a WMI counterpart are phantom/stale entries and are filtered out.
+/// Owns the set of controllable displays, a simple union of two sources: every
+/// physical monitor that answers a DDC/CI probe (VCP 0x10) gets a
+/// <see cref="DdcCiDisplayController"/>, and every WMI brightness instance
+/// (internal laptop panels) gets a <see cref="WmiDisplayController"/>.
+/// I2C probes are retried because they flake under load, and a display is only
+/// dropped after several consecutive enumeration misses.
 /// </summary>
 public sealed class DisplayManager
 {
@@ -112,9 +113,6 @@ public sealed class DisplayManager
             return SimulatedDisplayController.CreateSet();
         }
 
-        // Simple union listing: every physical monitor that answers DDC/CI, plus
-        // every WMI brightness instance (internal panels). No pairing or phantom
-        // filtering - duplicate/dead entries are accepted for now.
         var controllers = new List<IDisplayController>();
         var silent = new List<string>();
 

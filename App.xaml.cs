@@ -81,7 +81,6 @@ public partial class App : Application
             Log("Tray icon failed to initialize", ex);
         }
 
-        // The first OSD window doubles as the (hidden) raw-input message target.
         Osd = new OsdManager(Settings);
         _uiDispatcher = DispatcherQueue.GetForCurrentThread();
 

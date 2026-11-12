@@ -157,7 +157,6 @@ public sealed partial class SettingsWindow : Window
     private void OnBrightnessChanged(int value)
     {
         SetSlider(value);
-        UpdateDisplayStatus();
     }
 
     private void SetSlider(int value)

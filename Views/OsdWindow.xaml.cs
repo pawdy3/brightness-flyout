@@ -50,8 +50,6 @@ public sealed partial class OsdWindow : Window
     private bool _isExpanded;
     private bool _pointerInside;
 
-    internal HWND Hwnd => _hwnd;
-
     /// <summary>Fired when the OSD auto-hides after its timeout.</summary>
     public event Action? AutoHidden;
 
@@ -243,7 +241,7 @@ public sealed partial class OsdWindow : Window
 
     private void UpdateExpandButtonVisibility()
     {
-        var visible = _settings.MultiMonitorEnabled && (_displays?.Displays.Count ?? 0) > 0;
+        var visible = _settings.MultiMonitorEnabled && (_displays?.IncludedDisplays.Count ?? 0) > 0;
         ExpandButton.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         if (!visible && _isExpanded)
         {
@@ -406,7 +404,7 @@ public sealed partial class OsdWindow : Window
         double heightDip = CollapsedHeightDip;
         if (_isExpanded)
         {
-            int rows = _displays?.Displays.Count ?? 0;
+            int rows = _displays?.IncludedDisplays.Count ?? 0;
             heightDip += rows * (RowHeightDip + RowSpacingDip) + SyncRowHeightDip + ExpandedPaddingDip;
         }
 

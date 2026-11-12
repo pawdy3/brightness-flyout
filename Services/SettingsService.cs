@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -219,19 +219,10 @@ public partial class SettingsService : ObservableObject
         }
 
         text = text.Trim();
-        try
-        {
-            if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-            {
-                return Convert.ToInt32(text[2..], 16) is var v && v is >= 0 and <= 255 ? v : fallback;
-            }
-
-            return int.TryParse(text, out var d) && d is >= 0 and <= 255 ? d : fallback;
-        }
-        catch
-        {
-            return fallback;
-        }
+        var parsed = text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? int.TryParse(text[2..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var hex) ? hex : fallback
+            : int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dec) ? dec : fallback;
+        return parsed is >= 0 and <= 255 ? parsed : fallback;
     }
 }
 

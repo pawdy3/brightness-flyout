@@ -6,9 +6,11 @@ namespace BrightFlyout.Services;
 
 /// <summary>
 /// Diagnostic log at %LOCALAPPDATA%\BrightFlyout\debug.log, backed by Serilog's
-/// file sink. Bounded: tail-trimmed to 128 KB at startup when over 256 KB
-/// (Serilog's own size limits either stop writes or rename the file to
-/// debug_001.log - both worse than a startup trim here). Never throws.
+/// TextWriter sink over a file stream we open ourselves (Serilog's file sink
+/// shares read/write but not delete, which locks the file against moving or
+/// copying while the app runs). Bounded: tail-trimmed to 128 KB at startup when
+/// over 256 KB (Serilog's own size limits either stop writes or rename the file
+/// to debug_001.log - both worse than a startup trim here). Never throws.
 /// </summary>
 internal static class Log
 {
@@ -62,16 +64,15 @@ internal static class Log
     {
         try
         {
-            // Messages are pre-formatted by callers; escape braces so they are
-            // never interpreted as Serilog message-template tokens.
-            var template = message.Replace("{", "{{").Replace("}", "}}");
+            // Callers pre-format messages; pass them as a literal-format property
+            // so braces are never interpreted as message-template tokens.
             if (ex is null)
             {
-                Logger.Information(template);
+                Logger.Information("{Msg:l}", message);
             }
             else
             {
-                Logger.Information(ex, template);
+                Logger.Information(ex, "{Msg:l}", message);
             }
         }
         catch

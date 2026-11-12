@@ -20,9 +20,6 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Restore
-        run: dotnet restore -p:Platform=x64 -r win-x64
-
       # Both MSIX variants are signed with the stable self-signed cert from the
       # MSIX_CERT_PFX_BASE64 secret (base64-encoded certs/BrightFlyout.pfx).
       - name: Decode signing certificate
@@ -51,13 +48,14 @@ jobs:
       #
       # Artifact 1: AOT MSIX - NativeAOT exe only (~5 MB). Full feature set:
       # WMI (internal laptop panels) works via WmiLight, which is AOT-compatible.
-      # NOTE: no --no-restore - the ILCompiler toolchain is only pulled in when
-      # PublishAot=true is set during restore, so let publish restore itself.
+      # NOTE: no --no-restore and no upfront restore - the ILCompiler toolchain is
+      # only pulled in when PublishAot=true is set during restore, so let publish
+      # restore itself. MSIX-constant flags (EnableMsixTooling, AppxBundle, ...)
+      # live in the csproj's BuildMSIX property group.
       - name: Publish MSIX (AOT)
         run: >-
           dotnet publish -c Release -p:Platform=x64 -r win-x64
-          -p:BuildMSIX=true -p:PublishAot=true -p:EnableMsixTooling=true
-          -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
+          -p:BuildMSIX=true -p:PublishAot=true
           -p:PackageCertificateKeyFile=cert.pfx
           -p:AppxPackageDir=out\aot\
 
@@ -65,9 +63,7 @@ jobs:
       # on the same obj/bin corrupts the next package. Full reset.
       - name: Clean intermediates between variants
         shell: pwsh
-        run: |
-          Remove-Item -Recurse -Force bin, obj -ErrorAction SilentlyContinue
-          dotnet restore -p:Platform=x64 -r win-x64
+        run: Remove-Item -Recurse -Force bin, obj -ErrorAction SilentlyContinue
 
       # Artifact 2: hybrid MSIX - trimmed .NET 10 runtime inside (~11 MB).
       # Fallback variant; the AOT build has full feature parity.
@@ -75,8 +71,7 @@ jobs:
         run: >-
           dotnet publish -c Release -p:Platform=x64 -r win-x64
           -p:BuildMSIX=true -p:PublishAot=false -p:SelfContained=true
-          -p:PublishTrimmed=true -p:EnableMsixTooling=true
-          -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
+          -p:PublishTrimmed=true
           -p:PackageCertificateKeyFile=cert.pfx
           -p:AppxPackageDir=out\hybrid\
 

@@ -2,13 +2,9 @@ using System;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using BrightFlyout.Services.Displays;
 using BrightFlyout.Views;
 using Microsoft.UI.Dispatching;
-using Windows.Win32;
-using Windows.Win32.Foundation;
 
 namespace BrightFlyout.Services;
 

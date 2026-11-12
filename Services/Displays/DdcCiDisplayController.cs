@@ -21,16 +21,13 @@ internal sealed class DdcCiDisplayController : IDisplayController
 {
     private readonly string _deviceName;
     private readonly string _description;
-
-    private readonly object _writeGate = new();
-    private bool _writerRunning;
-    private int _pendingValue = -1;
-    private int _lastWrittenValue = -1;
+    private readonly CoalescingBrightnessWriter _writer;
 
     public DdcCiDisplayController(string deviceName, string description)
     {
         _deviceName = deviceName;
         _description = description;
+        _writer = new CoalescingBrightnessWriter(WriteCore);
     }
 
     public string Id => $"ddcci|{_deviceName}|{_description}";
@@ -158,40 +155,7 @@ internal sealed class DdcCiDisplayController : IDisplayController
     {
         percent = Math.Clamp(percent, 0, 100);
         CurrentBrightness = percent;
-
-        lock (_writeGate)
-        {
-            _pendingValue = percent;
-            if (_writerRunning)
-            {
-                return;
-            }
-
-            _writerRunning = true;
-        }
-
-        Task.Run(WriterLoop);
-    }
-
-    private void WriterLoop()
-    {
-        while (true)
-        {
-            int value;
-            lock (_writeGate)
-            {
-                if (_pendingValue == _lastWrittenValue)
-                {
-                    _writerRunning = false;
-                    return;
-                }
-
-                value = _pendingValue;
-            }
-
-            WriteCore(value);
-            _lastWrittenValue = value;
-        }
+        _writer.Set(percent);
     }
 
     private unsafe void WriteCore(int percent)

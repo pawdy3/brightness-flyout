@@ -3,8 +3,6 @@ obj/
 .vs/
 *.user
 AppPackages*/
-AppPackagesHybrid/
-AppPackagesAotFd/
 laptop-package/
 certs/
 cert.pfx

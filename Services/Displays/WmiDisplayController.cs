@@ -16,15 +16,12 @@ internal sealed class WmiDisplayController : IDisplayController
     private const string RootWmi = @"root\wmi";
 
     private readonly string _instanceName;
-
-    private readonly object _writeGate = new();
-    private bool _writerRunning;
-    private int _pendingValue = -1;
-    private int _lastWrittenValue = -1;
+    private readonly CoalescingBrightnessWriter _writer;
 
     public WmiDisplayController(string instanceName)
     {
         _instanceName = instanceName;
+        _writer = new CoalescingBrightnessWriter(WriteCore);
     }
 
     public string Id => $"wmi|{_instanceName}";
@@ -94,42 +91,9 @@ internal sealed class WmiDisplayController : IDisplayController
     {
         percent = Math.Clamp(percent, 0, 100);
         CurrentBrightness = percent;
-
-        // Coalesce: immediate per-event reverts during a key hold would otherwise
-        // queue dozens of identical WMI writes.
-        lock (_writeGate)
-        {
-            _pendingValue = percent;
-            if (_writerRunning)
-            {
-                return;
-            }
-
-            _writerRunning = true;
-        }
-
-        Task.Run(WriterLoop);
-    }
-
-    private void WriterLoop()
-    {
-        while (true)
-        {
-            int value;
-            lock (_writeGate)
-            {
-                if (_pendingValue == _lastWrittenValue)
-                {
-                    _writerRunning = false;
-                    return;
-                }
-
-                value = _pendingValue;
-            }
-
-            WriteCore(value);
-            _lastWrittenValue = value;
-        }
+        // Immediate per-event reverts during a key hold would otherwise queue
+        // dozens of identical WMI writes; the writer keeps only the latest.
+        _writer.Set(percent);
     }
 
     private void WriteCore(int percent)

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -48,6 +49,11 @@ internal sealed unsafe class KeyboardHookService : IDisposable
     private readonly System.Threading.Timer _repeatTimer;
     private DateTime _pressStartUtc;
 
+    // Parsed once per settings change: the LL hook is time-critical and must not
+    // re-parse the configured VK strings on every keystroke.
+    private int _downVk;
+    private int _upVk;
+
     /// <summary>Fired on a thread-pool thread whenever a brightness step is requested.</summary>
     public event Action<BrightnessDirection>? BrightnessStepRequested;
 
@@ -55,6 +61,22 @@ internal sealed unsafe class KeyboardHookService : IDisposable
     {
         _settings = settings;
         _repeatTimer = new System.Threading.Timer(OnRepeatTick, null, Timeout.Infinite, Timeout.Infinite);
+        CacheVkCodes();
+        _settings.PropertyChanged += OnSettingsPropertyChanged;
+    }
+
+    private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(SettingsService.BrightnessDownVk) or nameof(SettingsService.BrightnessUpVk))
+        {
+            CacheVkCodes();
+        }
+    }
+
+    private void CacheVkCodes()
+    {
+        _downVk = SettingsService.ParseVkCode(_settings.BrightnessDownVk, -1);
+        _upVk = SettingsService.ParseVkCode(_settings.BrightnessUpVk, -1);
     }
 
     /// <summary>Installs the keyboard hook and (when <paramref name="rawInputTargetHwnd"/>
@@ -122,17 +144,15 @@ internal sealed unsafe class KeyboardHookService : IDisposable
                 or PInvoke.WM_KEYUP or PInvoke.WM_SYSKEYUP)
             {
                 var data = *(KBDLLHOOKSTRUCT*)lParam.Value;
-                var downVk = SettingsService.ParseVkCode(_settings.BrightnessDownVk, -1);
-                var upVk = SettingsService.ParseVkCode(_settings.BrightnessUpVk, -1);
                 bool isDown = msg is PInvoke.WM_KEYDOWN or PInvoke.WM_SYSKEYDOWN;
 
-                if ((int)data.vkCode == downVk || (int)data.vkCode == upVk)
+                if ((int)data.vkCode == _downVk || (int)data.vkCode == _upVk)
                 {
                     // Swallow the key-up too: passing it through alone would leak a
                     // key release for a press the shell never saw.
                     if (isDown)
                     {
-                        Dispatch((int)data.vkCode == downVk ? BrightnessDirection.Down : BrightnessDirection.Up);
+                        Dispatch((int)data.vkCode == _downVk ? BrightnessDirection.Down : BrightnessDirection.Up);
                     }
 
                     return (LRESULT)1;
@@ -201,8 +221,9 @@ internal sealed unsafe class KeyboardHookService : IDisposable
                 return;
             }
 
-            bool up = Contains(usages, (int)usageCount, Win32.HidUsageBrightnessIncrement);
-            bool down = Contains(usages, (int)usageCount, Win32.HidUsageBrightnessDecrement);
+            var activeUsages = usages.AsSpan(0, (int)usageCount);
+            bool up = activeUsages.Contains(Win32.HidUsageBrightnessIncrement);
+            bool down = activeUsages.Contains(Win32.HidUsageBrightnessDecrement);
 
             if (up || down)
             {
@@ -226,19 +247,6 @@ internal sealed unsafe class KeyboardHookService : IDisposable
         {
             Marshal.FreeHGlobal(buffer);
         }
-    }
-
-    private static bool Contains(ushort[] usages, int count, ushort usage)
-    {
-        for (int i = 0; i < count; i++)
-        {
-            if (usages[i] == usage)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private bool TryGetPreparsedData(HANDLE hDevice, out byte[] preparsed)
@@ -328,6 +336,7 @@ internal sealed unsafe class KeyboardHookService : IDisposable
 
         _disposed = true;
         _current = null;
+        _settings.PropertyChanged -= OnSettingsPropertyChanged;
 
         _repeatTimer.Change(Timeout.Infinite, Timeout.Infinite);
         _repeatTimer.Dispose();
