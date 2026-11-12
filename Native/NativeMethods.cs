@@ -189,6 +189,12 @@ internal static class NativeMethods
     [DllImport("user32.dll")]
     public static extern uint GetDpiForWindow(IntPtr hwnd);
 
+    public const uint SPI_GETWORKAREA = 0x0030;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SystemParametersInfoW(uint uiAction, uint uiParam, out RECT pvParam, uint fWinIni);
+
     #endregion
 
     #region comctl32 (window subclassing, used to receive WM_INPUT)

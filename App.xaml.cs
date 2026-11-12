@@ -3,6 +3,8 @@ using BrightFlyout.Views;
 using H.NotifyIcon;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Windows.UI;
 
 namespace BrightFlyout;
 
@@ -20,8 +22,19 @@ public partial class App : Application
 
     public App()
     {
+        // Log everything before anything can fail silently (esp. on Win10).
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            Log("Fatal (AppDomain)", e.ExceptionObject as Exception);
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+            Log("Unobserved task exception", e.Exception);
+
         InitializeComponent();
+
+        UnhandledException += (_, e) => Log("Unhandled (XAML)", e.Exception);
     }
+
+    /// <summary>Windows 11 is 10.0.22000+; the manifest's supportedOS entry makes this reliable.</summary>
+    internal static bool IsWindows11 => Environment.OSVersion.Version >= new Version(10, 0, 22000);
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
@@ -39,6 +52,7 @@ public partial class App : Application
         _trayIcon = (TaskbarIcon)Resources["TrayIcon"];
         // Fixed ID so Windows remembers the icon's tray placement across restarts.
         _trayIcon.Id = new Guid("3F6B2A11-9C4E-4A5D-8E2F-1C7D9B0A6E55");
+        SetTrayIcon();
         _trayIcon.ForceCreate();
 
         // Events can't be wired in Application XAML; build the menu in code.
@@ -95,6 +109,30 @@ public partial class App : Application
             // The tray menu (SecondWindow mode) follows the TaskbarIcon's ActualTheme;
             // declared in Application.Resources it would otherwise default to light.
             _trayIcon.RequestedTheme = theme;
+        }
+    }
+
+    private void SetTrayIcon()
+    {
+        try
+        {
+            // Segoe Fluent Icons only exists on Windows 11; MDL2 Assets is the Win10
+            // equivalent. SkiaSharp (which renders GeneratedIconSource) doesn't support
+            // comma-separated fallback lists, so the family must be chosen explicitly.
+            var family = IsWindows11 ? "Segoe Fluent Icons" : "Segoe MDL2 Assets";
+            _trayIcon!.IconSource = new GeneratedIconSource
+            {
+                Text = "\uE706",
+                FontFamily = new FontFamily(family),
+                Foreground = new SolidColorBrush(Color.FromArgb(0xFF, 0xF5, 0xC5, 0x42)),
+                Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)),
+                FontSize = 96,
+                Size = 128
+            };
+        }
+        catch (Exception ex)
+        {
+            Log("Tray icon generation failed", ex);
         }
     }
 

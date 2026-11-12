@@ -33,6 +33,7 @@ public sealed partial class OsdWindow : Window
     private readonly RectInt32 _workArea;
     private DisplayManager? _displays;
     private bool _isDark = true;
+    private bool _acrylicAvailable = true;
     private bool _isExpanded;
     private bool _pointerInside;
     private NativeMethods.SubclassProc? _frameSubclassProc;
@@ -48,7 +49,16 @@ public sealed partial class OsdWindow : Window
         _workArea = workArea;
         InitializeComponent();
 
-        SystemBackdrop = new DesktopAcrylicBackdrop();
+        try
+        {
+            SystemBackdrop = new DesktopAcrylicBackdrop();
+        }
+        catch
+        {
+            // DesktopAcrylicBackdrop is unavailable on some Windows 10 builds;
+            // ApplyAppearance falls back to a solid panel background.
+            _acrylicAvailable = false;
+        }
 
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         var windowId = Win32Interop.GetWindowIdFromWindow(_hwnd);
@@ -289,10 +299,21 @@ public sealed partial class OsdWindow : Window
 
         TrackBar.Background = new SolidColorBrush(track);
 
-        Panel.Background = _settings.BackgroundStyle == OsdBackgroundStyle.SolidColor
-            && TryParseColor(_settings.CustomBackgroundColor, out var background)
-                ? new SolidColorBrush(background)
-                : new SolidColorBrush(Colors.Transparent);
+        if (!_acrylicAvailable)
+        {
+            // No backdrop on this system: always use an opaque background.
+            Panel.Background = TryParseColor(_settings.CustomBackgroundColor, out var custom)
+                && _settings.BackgroundStyle == OsdBackgroundStyle.SolidColor
+                    ? new SolidColorBrush(custom)
+                    : new SolidColorBrush(_isDark ? Color.FromArgb(0xFF, 0x1F, 0x1F, 0x1F) : Color.FromArgb(0xFF, 0xF9, 0xF9, 0xF9));
+        }
+        else
+        {
+            Panel.Background = _settings.BackgroundStyle == OsdBackgroundStyle.SolidColor
+                && TryParseColor(_settings.CustomBackgroundColor, out var background)
+                    ? new SolidColorBrush(background)
+                    : new SolidColorBrush(Colors.Transparent);
+        }
 
         FillBar.Background = _settings.FillStyle == OsdFillStyle.CustomColor
             && TryParseColor(_settings.CustomFillColor, out var fill)

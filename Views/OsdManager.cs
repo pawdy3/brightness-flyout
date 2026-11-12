@@ -70,9 +70,21 @@ public sealed class OsdManager
     private void EnsureWindows()
     {
         bool all = _settings.OsdPlacement == OsdPlacement.AllDisplays;
-        var areas = all
-            ? DisplayArea.FindAll().Select(a => a.WorkArea).ToList()
-            : [DisplayArea.Primary.WorkArea];
+
+        List<Windows.Graphics.RectInt32> areas;
+        try
+        {
+            areas = all
+                ? DisplayArea.FindAll().Select(a => a.WorkArea).ToList()
+                : [DisplayArea.Primary.WorkArea];
+        }
+        catch (Exception ex)
+        {
+            // DisplayArea can fail on Windows 10; fall back to the primary work area.
+            App.Log("DisplayArea unavailable, using primary work area fallback", ex);
+            areas = [GetPrimaryWorkArea()];
+            all = false;
+        }
 
         if (_windows.Count == areas.Count)
         {
@@ -108,5 +120,13 @@ public sealed class OsdManager
         {
             AutoHidden?.Invoke();
         }
+    }
+
+    private static Windows.Graphics.RectInt32 GetPrimaryWorkArea()
+    {
+        Native.NativeMethods.SystemParametersInfoW(
+            Native.NativeMethods.SPI_GETWORKAREA, 0, out var workArea, 0);
+        return new Windows.Graphics.RectInt32(
+            workArea.Left, workArea.Top, workArea.Width, workArea.Height);
     }
 }
