@@ -19,9 +19,9 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
-  <!-- MSIX packaging: self-contained Windows App SDK, sideload package. -->
+  <!-- MSIX packaging: framework-dependent Windows App SDK (the Microsoft.WindowsAppRuntime.2
+       package dependency is injected automatically and pulled from the Store at install). -->
   <PropertyGroup Condition="'$(BuildMSIX)' == 'true'">
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
     <AppxBundle>Never</AppxBundle>
     <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>

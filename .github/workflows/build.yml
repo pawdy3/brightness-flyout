@@ -45,9 +45,12 @@ jobs:
           $m = $m -replace '(<Identity[^>]*Version=")[\d.]+(")', "`${1}$v.0`${2}"
           [IO.File]::WriteAllText("Package.appxmanifest", $m, [Text.UTF8Encoding]::new($true))
 
-      # Artifact 1: AOT MSIX - NativeAOT exe + self-contained Windows App SDK.
-      # Smallest, zero prerequisites, but the WMI (internal laptop panel) path is
-      # not AOT-clean.
+      # Both variants pull the Windows App SDK automatically as the
+      # Microsoft.WindowsAppRuntime.2 framework package from the Store at install
+      # (PackageDependency is injected by the build).
+      #
+      # Artifact 1: AOT MSIX - NativeAOT exe only (~4.5 MB). The WMI path
+      # (internal laptop panels) is not AOT-clean.
       - name: Publish MSIX (AOT)
         run: >-
           dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-restore
@@ -56,13 +59,13 @@ jobs:
           -p:PackageCertificateKeyFile=cert.pfx
           -p:AppxPackageDir=out\aot\
 
-      # Artifact 2: hybrid MSIX - full .NET 10 runtime inside (reliable WMI),
-      # Windows App SDK pulled automatically as a framework package from the Store.
+      # Artifact 2: hybrid MSIX - full .NET 10 runtime inside (~45 MB),
+      # reliable WMI path.
       - name: Publish MSIX (hybrid)
         run: >-
           dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-restore
           -p:BuildMSIX=true -p:PublishAot=false -p:SelfContained=true
-          -p:WindowsAppSDKSelfContained=false -p:EnableMsixTooling=true
+          -p:EnableMsixTooling=true
           -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
           -p:PackageCertificateKeyFile=cert.pfx
           -p:AppxPackageDir=out\hybrid\

@@ -4,6 +4,7 @@ obj/
 *.user
 AppPackages/
 AppPackagesHybrid/
+AppPackagesAotFd/
 certs/
 cert.pfx
 BrightFlyout.cer

@@ -59,15 +59,17 @@ double-click opens Settings directly.
 CI (`.github/workflows/build.yml`) produces two MSIX packages on every push,
 and attaches them to a GitHub Release when a `v*` tag is pushed:
 
-| Artifact | Size | Contains | Prerequisites |
-|---|---|---|---|
-| `BrightFlyout_AOT_x64.msix` | ~30 MB | NativeAOT exe + self-contained Windows App SDK | none — but the WMI path (internal laptop panels) is not AOT-clean and may misbehave |
-| `BrightFlyout_Hybrid_x64.msix` | ~45 MB | regular build + full .NET 10 runtime | Windows App SDK 2.6, pulled **automatically from the Microsoft Store** during install (needs network + Store access once) |
+| Artifact | Size | Contains |
+|---|---|---|
+| `BrightFlyout_AOT_x64.msix` | ~4.5 MB | NativeAOT exe only — but the WMI path (internal laptop panels) is not AOT-clean and may misbehave |
+| `BrightFlyout_Hybrid_x64.msix` | ~45 MB | regular build + full .NET 10 runtime (reliable WMI) |
 
-Both are proper installers: Start Menu entry, Settings > Apps uninstall, and
+Both pull the Windows App SDK 2.6 automatically as a framework package from the
+Microsoft Store during install (one-time, needs network + Store access), and
+both are proper installers: Start Menu entry, Settings > Apps uninstall, and
 in-place upgrades (installing a newer `.msix` upgrades the app and keeps
-settings). Pick AOT for the smallest fully self-contained package; pick hybrid
-if internal laptop panel (WMI) control matters to you.
+settings). Pick AOT for the tiny package; pick hybrid if internal laptop panel
+(WMI) control matters to you.
 
 ### Installing the MSIX (one-time cert trust)
 
@@ -106,8 +108,10 @@ Local equivalents (both need MSVC C++ build tools for AOT; MSIX signing uses
 `certs\BrightFlyout.pfx` automatically if present):
 
 ```powershell
-# portable NativeAOT single exe, no installer
-dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:PublishAot=true -p:EnableMsixTooling=true
+# portable NativeAOT single exe, no installer, zero prerequisites
+# (self-contained Windows App SDK - unpackaged apps can't pull it from the Store)
+dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:PublishAot=true -p:EnableMsixTooling=true `
+  -p:WindowsAppSDKSelfContained=true
 
 # AOT MSIX -> AppPackages\..._x64_Test\
 dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=true `
@@ -115,7 +119,7 @@ dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:Publis
 
 # hybrid MSIX -> AppPackages\..._x64_Test\ (wipe that dir first if you built AOT into it)
 dotnet publish -c Release -p:Platform=x64 -r win-x64 -p:BuildMSIX=true -p:PublishAot=false `
-  -p:SelfContained=true -p:WindowsAppSDKSelfContained=false `
+  -p:SelfContained=true `
   -p:EnableMsixTooling=true -p:GenerateAppxPackageOnBuild=true -p:AppxBundle=Never
 ```
 
