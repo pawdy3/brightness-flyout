@@ -64,6 +64,19 @@ public sealed class DisplayManager
         }
     }
 
+    /// <summary>Implicit target choice (WMI mirror). Only applies when the configured
+    /// default display is not available - an explicit default always wins.</summary>
+    public void SetAutomaticTarget(string id)
+    {
+        if (_settings.DefaultMonitorId.Length > 0
+            && IncludedDisplays.Any(d => d.Id == _settings.DefaultMonitorId))
+        {
+            return;
+        }
+
+        SetTarget(id, automatic: true);
+    }
+
     /// <summary>Re-enumerates displays and refreshes cached brightness.</summary>
     public async Task RefreshAsync()
     {
@@ -248,10 +261,15 @@ public sealed class DisplayManager
     }
 
     /// <summary>Applies a brightness value to all included displays.</summary>
-    public void SetAllIncluded(int value)
+    public void SetAllIncluded(int value, string? exceptId = null)
     {
         foreach (var display in IncludedDisplays)
         {
+            if (display.Id == exceptId)
+            {
+                continue;
+            }
+
             display.SetBrightness(value);
         }
 

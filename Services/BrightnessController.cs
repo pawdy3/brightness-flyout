@@ -31,7 +31,9 @@ internal sealed class BrightnessController : IDisposable
     private string _lastRefreshFingerprint = string.Empty;
 
     // Excluded-panel revert state (see OnWmiBrightnessChanged).
+    private readonly DispatcherQueueTimer _wmiRevertTimer;
     private int? _wmiRevertingTo;
+    private int? _lastWmiEventValue;
 
     /// <summary>Raised (on the UI thread) whenever the target display's brightness changes.</summary>
     public event Action<int>? BrightnessChanged;
@@ -77,11 +79,34 @@ internal sealed class BrightnessController : IDisposable
         _hotplugTimer.Interval = TimeSpan.FromMilliseconds(800);
         _hotplugTimer.Tick += (_, _) => _ = RefreshDisplaysAsync();
 
-        // Input-source switches and monitor sleep do not raise WM_DISPLAYCHANGE;
-        // poll so dead/returned DDC links and externally-made changes surface.
+        // Events are primary (WM_DISPLAYCHANGE, monitor device-interface arrival,
+        // display power transitions); this is just a slow backstop for changes
+        // that raise none of them (e.g. a DDC link dying silently).
         _pollTimer = _dispatcherQueue.CreateTimer();
-        _pollTimer.Interval = TimeSpan.FromSeconds(5);
+        _pollTimer.Interval = TimeSpan.FromSeconds(60);
         _pollTimer.Tick += (_, _) => _ = RefreshDisplaysAsync();
+
+        // When the internal panel is excluded from control, Windows still changes
+        // it on laptop key presses. The vendor driver ramps smoothly and fires an
+        // event per intermediate step, so reverting immediately per event fights
+        // the ramp. Revert once, after the press burst ends.
+        _wmiRevertTimer = _dispatcherQueue.CreateTimer();
+        _wmiRevertTimer.IsRepeating = false;
+        _wmiRevertTimer.Interval = TimeSpan.FromMilliseconds(400);
+        _wmiRevertTimer.Tick += (_, _) =>
+        {
+            var wmiDisplay = Displays.Displays.FirstOrDefault(d => d.Controller is WmiDisplayController);
+            if (wmiDisplay is null || (_lastWmiEventValue ?? wmiDisplay.Brightness) == wmiDisplay.Brightness)
+            {
+                return;
+            }
+
+            var baseline = wmiDisplay.Brightness;
+            Log.Write($"Reverting Windows-made change on excluded panel -> {baseline}%");
+            _wmiRevertingTo = baseline;
+            _lastWmiEventValue = baseline;
+            wmiDisplay.Controller.SetBrightness(baseline);
+        };
     }
 
     // WM_DISPLAYCHANGE / monitor device-interface arrival arrive via the tray
@@ -219,40 +244,43 @@ internal sealed class BrightnessController : IDisposable
                 return;
             }
 
-            // Feedback echo of our own revert write: swallow it.
-            if (_wmiRevertingTo is { } revertingTo && Math.Abs(value - revertingTo) <= 1)
+            // A revert write makes the vendor driver ramp smoothly back to the
+            // pinned value, firing an event per intermediate step. Swallow those
+            // until the ramp completes - they are not key presses.
+            if (_wmiRevertingTo is { } revertingTo)
             {
-                _wmiRevertingTo = null;
-                wmiDisplay.SetBrightnessSilently(value);
+                if (Math.Abs(value - revertingTo) <= 1)
+                {
+                    _wmiRevertingTo = null;
+                    _lastWmiEventValue = value;
+                    wmiDisplay.SetBrightnessSilently(value);
+                }
+
                 return;
             }
-            _wmiRevertingTo = null;
 
             if (!wmiDisplay.IsIncluded)
             {
                 // The panel is excluded, but Windows changed it anyway (monitor.sys
                 // handles the ACPI hotkey in kernel mode - there is no user-mode or
-                // registry opt-out). Revert immediately, before the backlight ramp
-                // becomes visible, and forward the press direction to the actual
-                // target display instead. The panel model stays pinned at the
-                // pre-press value.
-                var direction = Math.Sign(value - wmiDisplay.Brightness);
-                if (direction == 0)
+                // registry opt-out). Forward each event's delta to the actual target
+                // display (native steps arrive as +-10, vendor smooth-hold as +-1,
+                // so forward the delta, not a fixed step), and revert the panel once
+                // the burst ends. The panel model stays pinned at the pre-press value.
+                var delta = value - (_lastWmiEventValue ?? value);
+                _lastWmiEventValue = value;
+                if (delta == 0)
                 {
                     return;
                 }
 
-                Log.Write($"Reverting Windows-made change on excluded panel -> {wmiDisplay.Brightness}%");
-                _wmiRevertingTo = wmiDisplay.Brightness;
-                wmiDisplay.Controller.SetBrightness(wmiDisplay.Brightness);
-
                 if (Displays.Target is { } target && target != wmiDisplay)
                 {
-                    var stepped = Math.Clamp(
-                        target.Brightness + _settings.BrightnessStep * direction, 0, 100);
-                    ApplyBrightness(stepped);
+                    ApplyBrightness(Math.Clamp(target.Brightness + delta, 0, 100));
                 }
 
+                _wmiRevertTimer.Stop();
+                _wmiRevertTimer.Start();
                 return;
             }
 
@@ -262,13 +290,15 @@ internal sealed class BrightnessController : IDisposable
             }
 
             wmiDisplay.SetBrightnessSilently(value);
-            // Automatic target: returns to the configured default when that
-            // display becomes available again (e.g. monitor input switched back).
-            Displays.SetTarget(wmiDisplay.Id, automatic: true);
+            _lastWmiEventValue = value;
+            // Implicit target: applies only while no configured default is available.
+            Displays.SetAutomaticTarget(wmiDisplay.Id);
 
             if (_settings.SyncMonitors)
             {
-                Displays.SetAllIncluded(value);
+                // Windows already wrote the internal panel; writing it back would
+                // fight the vendor driver's smooth stepping (event storm).
+                Displays.SetAllIncluded(value, exceptId: wmiDisplay.Id);
             }
 
             ApplyOsd(value);
@@ -345,6 +375,7 @@ internal sealed class BrightnessController : IDisposable
         _restoreTimer.Stop();
         _hotplugTimer.Stop();
         _pollTimer.Stop();
+        _wmiRevertTimer.Stop();
 
         _wmiWatcher.Dispose();
         _hook.Dispose();

@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using BrightFlyout.Native;
 using Windows.Win32;
 using Windows.Win32.Foundation;
+using Windows.Win32.System.Power;
 using Windows.Win32.UI.Shell;
 using Windows.Win32.UI.WindowsAndMessaging;
 
@@ -31,6 +33,7 @@ internal sealed unsafe class TrayIconService : IDisposable
     private string _tooltip;
     private bool _iconAdded;
     private HDEVNOTIFY _monitorNotify;
+    private readonly List<HPOWERNOTIFY> _powerNotifies = [];
 
     /// <summary>The message-only window backing the tray icon. Lives for the whole
     /// process (unlike OSD windows, which are recreated on topology changes), so it
@@ -55,7 +58,46 @@ internal sealed unsafe class TrayIconService : IDisposable
 
         _hwnd = CreateMessageWindow();
         RegisterMonitorNotifications();
+        RegisterPowerNotifications();
         AddIcon();
+    }
+
+    /// <summary>Display sleep/wake and system resume are display-link events too
+    /// (DDC/CI links commonly die across them) - refresh on those.</summary>
+    private void RegisterPowerNotifications()
+    {
+        if (_hwnd.IsNull)
+        {
+            return;
+        }
+
+        foreach (var guid in new[] { PInvoke.GUID_CONSOLE_DISPLAY_STATE, PInvoke.GUID_MONITOR_POWER_ON })
+        {
+            var g = guid;
+            var notify = PInvoke.RegisterPowerSettingNotification(
+                new HANDLE(_hwnd.Value), &g, REGISTER_NOTIFICATION_FLAGS.DEVICE_NOTIFY_WINDOW_HANDLE);
+            if (!notify.IsNull)
+            {
+                _powerNotifies.Add(notify);
+            }
+        }
+    }
+
+    private static bool IsDisplayPowerChange(WPARAM wParam, LPARAM lParam)
+    {
+        if ((uint)wParam.Value == PInvoke.PBT_APMRESUMEAUTOMATIC)
+        {
+            return true;
+        }
+
+        if ((uint)wParam.Value != PInvoke.PBT_POWERSETTINGCHANGE || lParam.Value == 0)
+        {
+            return false;
+        }
+
+        var setting = (POWERBROADCAST_SETTING*)lParam.Value;
+        return setting->PowerSetting == PInvoke.GUID_CONSOLE_DISPLAY_STATE
+            || setting->PowerSetting == PInvoke.GUID_MONITOR_POWER_ON;
     }
 
     /// <summary>Monitor input-source switches and cable events surface as monitor
@@ -243,6 +285,12 @@ internal sealed unsafe class TrayIconService : IDisposable
             return PInvoke.DefWindowProc(hWnd, msg, wParam, lParam);
         }
 
+        if (msg == PInvoke.WM_POWERBROADCAST && IsDisplayPowerChange(wParam, lParam))
+        {
+            _instance?.DisplayChangeBroadcast?.Invoke();
+            return (LRESULT)1; // TRUE: power-setting messages expect TRUE
+        }
+
         if (msg == _wmTaskbarCreated && _wmTaskbarCreated != 0)
         {
             // Explorer restarted: re-register the icon.
@@ -321,6 +369,13 @@ internal sealed unsafe class TrayIconService : IDisposable
         {
             PInvoke.UnregisterDeviceNotification(_monitorNotify);
         }
+
+        foreach (var notify in _powerNotifies)
+        {
+            PInvoke.UnregisterPowerSettingNotification(notify);
+        }
+
+        _powerNotifies.Clear();
 
         if (!_hwnd.IsNull)
         {

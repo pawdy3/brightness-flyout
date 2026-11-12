@@ -19,24 +19,31 @@ internal static class Log
 
     private static Serilog.Core.Logger CreateLogger()
     {
+        TextWriter? writer = null;
         try
         {
             AppPaths.EnsureAppDataDirectory();
             TrimIfNeeded();
+
+            // Open the file ourselves: Serilog's file sink shares read/write but not
+            // delete, which locks the file against moving/renaming while we run.
+            var stream = new FileStream(AppPaths.LogFile, FileMode.Append, FileAccess.Write,
+                FileShare.ReadWrite | FileShare.Delete);
+            writer = TextWriter.Synchronized(new StreamWriter(stream) { AutoFlush = true });
         }
         catch
         {
             // logging must never throw
         }
 
-        return new LoggerConfiguration()
-            .WriteTo.File(
-                AppPaths.LogFile,
-                outputTemplate: "[{Timestamp:HH:mm:ss}] {Message:lj}{NewLine}{Exception}",
-                // Shared: a second instance (single-instance check) must be able to
-                // log while the first holds the file.
-                shared: true)
-            .CreateLogger();
+        var config = new LoggerConfiguration();
+        if (writer is not null)
+        {
+            config = config.WriteTo.TextWriter(writer,
+                outputTemplate: "[{Timestamp:HH:mm:ss}] {Message:lj}{NewLine}{Exception}");
+        }
+
+        return config.CreateLogger();
     }
 
     /// <summary>Tail-trims the log file when it exceeds <see cref="MaxBytes"/>.</summary>
