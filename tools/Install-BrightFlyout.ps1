@@ -70,19 +70,50 @@ if ($running) {
 }
 
 # --- install ---
+# Same version + different content (a rebuild) is rejected by the deployment
+# engine - with error codes that vary by Windows build and UI language, so
+# detect it proactively: read the version out of the package manifest and
+# remove the existing package up front instead of matching error messages.
+function Get-MsixVersion([string]$Path) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($Path)
+    try {
+        $entry = $zip.Entries | Where-Object { $_.FullName -eq 'AppxManifest.xml' } | Select-Object -First 1
+        $reader = New-Object IO.StreamReader($entry.Open())
+        try {
+            [xml]$manifest = $reader.ReadToEnd()
+            return [version]$manifest.Package.Identity.Version
+        } finally {
+            $reader.Dispose()
+        }
+    } finally {
+        $zip.Dispose()
+    }
+}
+
+$existing = Get-AppxPackage -Name BrightFlyout
+if ($existing) {
+    $sameVersion = [version]$existing.Version -eq (Get-MsixVersion $PackagePath)
+    if ($sameVersion) {
+        Write-Step 'Same version already installed - replacing it...'
+        Remove-AppxPackage -Package $existing.PackageFullName
+    }
+}
+
 Write-Step "Installing $(Split-Path $PackagePath -Leaf)..."
 try {
     Add-AppxPackage -Path $PackagePath -ForceUpdateFromAnyVersion -ForceApplicationShutdown -ErrorAction Stop
 } catch {
-    if ($_.Exception.Message -match '0x80073CFB') {
-        # Same version, different content (a rebuild): remove first, then install.
-        Write-Step 'Same version already installed - replacing it...'
-        $existing = Get-AppxPackage -Name BrightFlyout
-        if ($existing) { Remove-AppxPackage -Package $existing.PackageFullName }
+    if ($existing -and -not $sameVersion) {
+        # Unexpected failure on an upgrade/downgrade path: retry as replace.
+        Write-Step "Install failed ($($_.Exception.Message)) - retrying as replace..."
+        Remove-AppxPackage -Package $existing.PackageFullName
         Add-AppxPackage -Path $PackagePath -ErrorAction Stop
-    } else {
+    } elseif (-not $existing) {
         Write-Host "Install failed: $($_.Exception.Message)" -ForegroundColor Red
         exit 1
+    } else {
+        throw
     }
 }
 
