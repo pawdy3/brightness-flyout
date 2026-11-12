@@ -46,10 +46,8 @@ internal sealed class BrightnessController : IDisposable
         _suppressWatchdog.Interval = TimeSpan.FromMilliseconds(150);
         _suppressWatchdog.Tick += (_, _) =>
         {
-            if (!NativeOsdSuppressor.IsSuppressed)
-            {
-                NativeOsdSuppressor.Suppress();
-            }
+            // Cheap and idempotent: the shell can recreate its OSD host between ticks.
+            NativeOsdSuppressor.Suppress();
         };
 
         // Bring the native OSD back only after our flyout has fully disappeared,

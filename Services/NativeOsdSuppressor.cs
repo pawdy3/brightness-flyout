@@ -15,41 +15,57 @@ internal static class NativeOsdSuppressor
 {
     private static IntPtr _nativeOsdElement = IntPtr.Zero;
     private static long _originalExStyle;
-    private static IntPtr _legacyOsdElement = IntPtr.Zero;
+    private static readonly List<IntPtr> _legacyOsdElements = [];
+    private static bool _loggedLegacySearch;
 
-    public static bool IsSuppressed => _nativeOsdElement != IntPtr.Zero || _legacyOsdElement != IntPtr.Zero;
+    public static bool IsSuppressed => _nativeOsdElement != IntPtr.Zero || _legacyOsdElements.Count > 0;
 
     public static void Suppress()
     {
-        if (IsSuppressed)
+        // Strictly OS-branched: no fallback mixing between the two host models.
+        if (App.IsWindows11)
         {
-            return; // already hidden
+            SuppressWindows11Osd();
         }
-
-        if (!SuppressWindows11Osd())
+        else
         {
             SuppressLegacyOsd();
         }
     }
 
     /// <summary>Windows 10 and earlier: the OSD is a DirectUI popup hosted in a
-    /// "NativeHWNDHost" window (the gpkgpk/HideVolumeOSD approach).</summary>
+    /// "NativeHWNDHost" window (the gpkgpk/HideVolumeOSD approach). There may be
+    /// several such hosts; hide all that contain a DirectUIHWND child.</summary>
     private static void SuppressLegacyOsd()
     {
-        var hwnd = NativeMethods.FindWindowExW(IntPtr.Zero, IntPtr.Zero, "NativeHWNDHost", "");
-        if (hwnd == IntPtr.Zero
-            || NativeMethods.FindWindowExW(hwnd, IntPtr.Zero, "DirectUIHWND", "") == IntPtr.Zero)
+        IntPtr hwnd = IntPtr.Zero;
+        while ((hwnd = NativeMethods.FindWindowExW(IntPtr.Zero, hwnd, "NativeHWNDHost", null)) != IntPtr.Zero)
         {
-            return;
+            if (_legacyOsdElements.Contains(hwnd)
+                || NativeMethods.FindWindowExW(hwnd, IntPtr.Zero, "DirectUIHWND", null) == IntPtr.Zero)
+            {
+                continue;
+            }
+
+            _legacyOsdElements.Add(hwnd);
+            NativeMethods.ShowWindow(hwnd, NativeMethods.SW_HIDE);
         }
 
-        _legacyOsdElement = hwnd;
-        NativeMethods.ShowWindow(hwnd, NativeMethods.SW_HIDE);
+        if (_legacyOsdElements.Count == 0 && !_loggedLegacySearch)
+        {
+            _loggedLegacySearch = true;
+            App.Log("Legacy OSD host (NativeHWNDHost/DirectUIHWND) not found");
+        }
     }
 
     /// <summary>Windows 11 22H2+: the OSD lives in an explorer-hosted XAML island.</summary>
     private static bool SuppressWindows11Osd()
     {
+        if (_nativeOsdElement != IntPtr.Zero)
+        {
+            return true; // already hidden
+        }
+
 
         // Walk the XAML islands; FindWindowEx must be given the previous handle as
         // hwndChildAfter, otherwise it returns the same first island forever.
@@ -105,11 +121,12 @@ internal static class NativeOsdSuppressor
 
     public static void Restore()
     {
-        if (_legacyOsdElement != IntPtr.Zero)
+        foreach (var hwnd in _legacyOsdElements)
         {
-            NativeMethods.ShowWindow(_legacyOsdElement, NativeMethods.SW_SHOWNOACTIVATE);
-            _legacyOsdElement = IntPtr.Zero;
+            NativeMethods.ShowWindow(hwnd, NativeMethods.SW_SHOWNOACTIVATE);
         }
+
+        _legacyOsdElements.Clear();
 
         if (_nativeOsdElement == IntPtr.Zero)
         {

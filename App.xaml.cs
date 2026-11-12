@@ -148,6 +148,8 @@ public partial class App : Application
     }
 
     private int _trayCreateAttempts;
+    private bool _triedPathGuid;
+    private bool _triedRandomGuid;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _trayRetryTimer;
 
     /// <summary>
@@ -167,7 +169,23 @@ public partial class App : Application
             var win32 = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
             Log($"Tray icon creation failed (attempt {_trayCreateAttempts + 1}, win32={win32})", ex);
 
-            if (++_trayCreateAttempts < 10)
+            _trayCreateAttempts++;
+            if (_trayCreateAttempts == 2 && !_triedPathGuid)
+            {
+                // The shell's GUID table can wedge an entry for a fixed GUID;
+                // fall back to the path-derived scheme, then a random GUID.
+                _triedPathGuid = true;
+                _trayIcon!.Id = PathDerivedGuid();
+                Log("Retrying tray icon with path-derived GUID");
+            }
+            else if (_trayCreateAttempts == 4 && !_triedRandomGuid)
+            {
+                _triedRandomGuid = true;
+                _trayIcon!.Id = Guid.NewGuid();
+                Log("Retrying tray icon with random GUID");
+            }
+
+            if (_trayCreateAttempts < 10)
             {
                 _trayRetryTimer ??= InitializeTrayRetryTimer();
                 _trayRetryTimer.Start();
@@ -183,6 +201,16 @@ public partial class App : Application
         timer.IsRepeating = true;
         timer.Tick += (_, _) => TryCreateTrayIcon();
         return timer;
+    }
+
+    /// <summary>H.NotifyIcon's default scheme: first 16 bytes of SHA256(utf8(processPath + "_")).</summary>
+    private static Guid PathDerivedGuid()
+    {
+        var path = (Environment.ProcessPath ?? "BrightFlyout") + "_";
+        var hash = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(path));
+        var bytes = new byte[16];
+        Array.Copy(hash, bytes, 16);
+        return new Guid(bytes);
     }
 
     private void OnBrightnessChanged(int value)
@@ -217,6 +245,8 @@ public partial class App : Application
         _settingsWindow.Activate();
     }
 
+    private const int MaxLogBytes = 256 * 1024;
+
     internal static void Log(string message, Exception? ex = null)
     {
         try
@@ -224,7 +254,18 @@ public partial class App : Application
             var dir = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BrightFlyout");
             Directory.CreateDirectory(dir);
-            File.AppendAllText(Path.Combine(dir, "debug.log"),
+            var path = Path.Combine(dir, "debug.log");
+
+            // Keep the log bounded: when it exceeds 256 KB, keep only the last 128 KB.
+            if (File.Exists(path) && new FileInfo(path).Length > MaxLogBytes)
+            {
+                var bytes = File.ReadAllBytes(path);
+                var tail = bytes[^((MaxLogBytes / 2))..];
+                File.WriteAllBytes(path, tail);
+                File.AppendAllText(path, $"[{DateTime.Now:HH:mm:ss}] [... older log trimmed ...]{Environment.NewLine}");
+            }
+
+            File.AppendAllText(path,
                 $"[{DateTime.Now:HH:mm:ss}] {message}{(ex is null ? "" : $": {ex}")}{Environment.NewLine}");
         }
         catch

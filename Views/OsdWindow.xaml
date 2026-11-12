@@ -140,13 +140,24 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <ToggleSwitch
-                        x:Name="SyncToggle"
-                        Margin="0,4,0,0"
-                        Header="Synchronize all displays"
-                        OffContent=""
-                        OnContent=""
-                        Toggled="OnSyncToggled" />
+                    <Grid Margin="0,8,0,4" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontSize="12"
+                            Text="Synchronize all displays"
+                            TextWrapping="Wrap" />
+                        <ToggleSwitch
+                            x:Name="SyncToggle"
+                            Grid.Column="1"
+                            VerticalAlignment="Center"
+                            OffContent=""
+                            OnContent=""
+                            Toggled="OnSyncToggled" />
+                    </Grid>
                 </StackPanel>
             </Grid>
         </Border>
