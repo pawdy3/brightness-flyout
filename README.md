@@ -44,34 +44,42 @@ built-in one.
 
 ## Build & run
 
-Requires: .NET 8 SDK, Windows App SDK 1.8 runtime.
+Requires: .NET 10 SDK, Windows App SDK 1.8 runtime (debug builds).
 
 ```powershell
 dotnet build -c Debug -p:Platform=x64 -r win-x64
-.\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\BrightFlyout.exe
+.\bin\x64\Debug\net10.0-windows10.0.19041.0\win-x64\BrightFlyout.exe
 ```
 
-The app lives in the system tray (sun icon). Right-click → **Settings**.
+The app lives in the system tray (sun icon). Right-click → **Settings**,
+double-click opens Settings directly.
 
 ## Distribution
 
-CI (`.github/workflows/build.yml`) publishes a **self-contained single-file
-`BrightFlyout.exe`** (~200 MB, no .NET or Windows App SDK runtime required) as a
-workflow artifact on every push, and attaches it to a GitHub Release when a `v*`
-tag is pushed:
+CI (`.github/workflows/build.yml`) produces three artifacts on every push, and
+attaches them to a GitHub Release when a `v*` tag is pushed:
+
+| Artifact | Size | Prerequisites |
+|---|---|---|
+| `BrightFlyoutSetup-*.exe` | ~56 MB | none (per-user install, optional autostart) |
+| `BrightFlyout-win-x64.zip` | ~200 MB | none (self-contained single-file exe) |
+| `BrightFlyout-win-x64-minimal.zip` | ~38 MB | .NET Desktop Runtime 10 + Windows App SDK 1.8 runtime |
 
 ```powershell
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.2
+git push origin v1.0.2
 ```
 
-Local equivalent:
+Local equivalents:
 
 ```powershell
+# self-contained single file
 dotnet publish -c Release -p:Platform=x64 -r win-x64 --self-contained `
   -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=true `
   -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableMsixTooling=true
-# -> bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\publish\BrightFlyout.exe
+
+# installer (requires Inno Setup 6, ISCC.exe on PATH)
+ISCC.exe installer.iss /DAppVersion=1.0.2
 ```
 
 ## Notes

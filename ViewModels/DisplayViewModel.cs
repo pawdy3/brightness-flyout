@@ -21,7 +21,7 @@ public partial class DisplayViewModel : ObservableObject
         Controller = controller;
         _setRequested = setRequested;
         _includeChanged = includeChanged;
-        _brightness = controller.CurrentBrightness ?? 50;
+        Brightness = controller.CurrentBrightness ?? 50;
     }
 
     public IDisplayController Controller { get; }
@@ -32,14 +32,14 @@ public partial class DisplayViewModel : ObservableObject
 
     /// <summary>Bound two-way to the display's slider.</summary>
     [ObservableProperty]
-    private int _brightness;
+    public partial int Brightness { get; set; }
 
     [ObservableProperty]
-    private bool _isTarget;
+    public partial bool IsTarget { get; set; }
 
     /// <summary>Whether this display is controlled (keyboard, sync, flyout).</summary>
     [ObservableProperty]
-    private bool _isIncluded = true;
+    public partial bool IsIncluded { get; set; } = true;
 
     partial void OnIsIncludedChanged(bool value) => _includeChanged(this, value);
 
@@ -49,7 +49,7 @@ public partial class DisplayViewModel : ObservableObject
     partial void OnIsTargetChanged(bool value) => OnPropertyChanged(nameof(TargetMarkerVisibility));
 
     [ObservableProperty]
-    private bool _isAvailable = true;
+    public partial bool IsAvailable { get; set; } = true;
 
     public string Summary => $"{Name} - {Technology}";
 

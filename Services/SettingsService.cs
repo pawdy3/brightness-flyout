@@ -5,18 +5,21 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace BrightFlyout.Services;
 
+[JsonConverter(typeof(JsonStringEnumConverter<OsdBackgroundStyle>))]
 public enum OsdBackgroundStyle
 {
     Acrylic,
     SolidColor
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<OsdFillStyle>))]
 public enum OsdFillStyle
 {
     SystemAccent,
     CustomColor
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<AppTheme>))]
 public enum AppTheme
 {
     System,
@@ -24,6 +27,7 @@ public enum AppTheme
     Dark
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<OsdPlacement>))]
 public enum OsdPlacement
 {
     Primary,
@@ -32,21 +36,11 @@ public enum OsdPlacement
 
 /// <summary>
 /// JSON-backed, observable application settings persisted to
-/// %LOCALAPPDATA%\BrightFlyout\settings.json.
+/// %LOCALAPPDATA%\BrightFlyout\settings.json. Uses partial properties and a
+/// source-generated JSON context so the app stays NativeAOT-compatible.
 /// </summary>
 public partial class SettingsService : ObservableObject
 {
-    private static readonly string SettingsDirectory =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BrightFlyout");
-
-    private static readonly string SettingsPath = Path.Combine(SettingsDirectory, "settings.json");
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() }
-    };
-
     private bool _suppressSave = true;
 
     public SettingsService()
@@ -57,88 +51,88 @@ public partial class SettingsService : ObservableObject
     // --- Behavior ---
 
     [ObservableProperty]
-    [property: JsonPropertyName("brightnessStep")]
-    private int _brightnessStep = 5;
+    [JsonPropertyName("brightnessStep")]
+    public partial int BrightnessStep { get; set; } = 5;
 
     [ObservableProperty]
-    [property: JsonPropertyName("osdDurationMs")]
-    private int _osdDurationMs = 2000;
+    [JsonPropertyName("osdDurationMs")]
+    public partial int OsdDurationMs { get; set; } = 2000;
 
     [ObservableProperty]
-    [property: JsonPropertyName("runAtStartup")]
-    private bool _runAtStartup;
+    [JsonPropertyName("runAtStartup")]
+    public partial bool RunAtStartup { get; set; }
 
     // --- Keyboard hook ---
 
     [ObservableProperty]
-    [property: JsonPropertyName("enableRawInput")]
-    private bool _enableRawInput = true;
+    [JsonPropertyName("enableRawInput")]
+    public partial bool EnableRawInput { get; set; } = true;
 
     /// <summary>VK code (hex or decimal) watched by the WH_KEYBOARD_LL hook for brightness down.</summary>
     [ObservableProperty]
-    [property: JsonPropertyName("brightnessDownVk")]
-    private string _brightnessDownVk = "0x9E";
+    [JsonPropertyName("brightnessDownVk")]
+    public partial string BrightnessDownVk { get; set; } = "0x9E";
 
     /// <summary>VK code (hex or decimal) watched by the WH_KEYBOARD_LL hook for brightness up.</summary>
     [ObservableProperty]
-    [property: JsonPropertyName("brightnessUpVk")]
-    private string _brightnessUpVk = "0x9F";
+    [JsonPropertyName("brightnessUpVk")]
+    public partial string BrightnessUpVk { get; set; } = "0x9F";
 
     // --- Appearance ---
 
     [ObservableProperty]
-    [property: JsonPropertyName("theme")]
-    private AppTheme _theme = AppTheme.System;
+    [JsonPropertyName("theme")]
+    public partial AppTheme Theme { get; set; } = AppTheme.System;
 
     [ObservableProperty]
-    [property: JsonPropertyName("backgroundStyle")]
-    private OsdBackgroundStyle _backgroundStyle = OsdBackgroundStyle.Acrylic;
+    [JsonPropertyName("backgroundStyle")]
+    public partial OsdBackgroundStyle BackgroundStyle { get; set; } = OsdBackgroundStyle.Acrylic;
 
     [ObservableProperty]
-    [property: JsonPropertyName("customBackgroundColor")]
-    private string _customBackgroundColor = "#E61F1F1F";
+    [JsonPropertyName("customBackgroundColor")]
+    public partial string CustomBackgroundColor { get; set; } = "#E61F1F1F";
 
     [ObservableProperty]
-    [property: JsonPropertyName("fillStyle")]
-    private OsdFillStyle _fillStyle = OsdFillStyle.SystemAccent;
+    [JsonPropertyName("fillStyle")]
+    public partial OsdFillStyle FillStyle { get; set; } = OsdFillStyle.SystemAccent;
 
     [ObservableProperty]
-    [property: JsonPropertyName("customFillColor")]
-    private string _customFillColor = "#FFF5C542";
+    [JsonPropertyName("customFillColor")]
+    public partial string CustomFillColor { get; set; } = "#FFF5C542";
 
     [ObservableProperty]
-    [property: JsonPropertyName("showPercentText")]
-    private bool _showPercentText = true;
+    [JsonPropertyName("showPercentText")]
+    public partial bool ShowPercentText { get; set; } = true;
 
     // --- Multiple displays ---
 
     [ObservableProperty]
-    [property: JsonPropertyName("multiMonitorEnabled")]
-    private bool _multiMonitorEnabled;
+    [JsonPropertyName("multiMonitorEnabled")]
+    public partial bool MultiMonitorEnabled { get; set; }
 
     /// <summary>Id of the display the keyboard controls by default (empty = first).</summary>
     [ObservableProperty]
-    [property: JsonPropertyName("defaultMonitorId")]
-    private string _defaultMonitorId = string.Empty;
+    [JsonPropertyName("defaultMonitorId")]
+    public partial string DefaultMonitorId { get; set; } = string.Empty;
 
     /// <summary>Ids of displays excluded from control.</summary>
     [ObservableProperty]
-    [property: JsonPropertyName("excludedMonitorIds")]
-    private List<string> _excludedMonitorIds = [];
+    [JsonPropertyName("excludedMonitorIds")]
+    public partial List<string> ExcludedMonitorIds { get; set; } = [];
 
     /// <summary>When on, any brightness change is applied to all included displays.</summary>
     [ObservableProperty]
-    [property: JsonPropertyName("syncMonitors")]
-    private bool _syncMonitors;
+    [JsonPropertyName("syncMonitors")]
+    public partial bool SyncMonitors { get; set; }
 
     [ObservableProperty]
-    [property: JsonPropertyName("osdPlacement")]
-    private OsdPlacement _osdPlacement = OsdPlacement.Primary;
+    [JsonPropertyName("osdPlacement")]
+    public partial OsdPlacement OsdPlacement { get; set; } = OsdPlacement.Primary;
 
     /// <summary>Last version an update notification was shown for (never nag twice).</summary>
     [ObservableProperty]
-    [property: JsonPropertyName("lastNotifiedVersion")]
-    private string _lastNotifiedVersion = string.Empty;
+    [JsonPropertyName("lastNotifiedVersion")]
+    public partial string LastNotifiedVersion { get; set; } = string.Empty;
 
     partial void OnBrightnessStepChanged(int value) => BrightnessStep = Math.Clamp(value, 1, 50);
     partial void OnOsdDurationMsChanged(int value) => OsdDurationMs = Math.Clamp(value, 500, 10000);
@@ -155,10 +149,10 @@ public partial class SettingsService : ObservableObject
     {
         try
         {
-            if (File.Exists(SettingsPath))
+            if (File.Exists(AppPaths.SettingsFile))
             {
-                var json = File.ReadAllText(SettingsPath);
-                var loaded = JsonSerializer.Deserialize<SettingsService>(json, JsonOptions);
+                var json = File.ReadAllText(AppPaths.SettingsFile);
+                var loaded = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.SettingsService);
                 if (loaded is not null)
                 {
                     BrightnessStep = loaded.BrightnessStep;
@@ -182,9 +176,10 @@ public partial class SettingsService : ObservableObject
                 }
             }
         }
-        catch
+        catch (Exception ex)
         {
             // Corrupt or unreadable settings -> keep defaults.
+            Log.Write("Settings load failed, using defaults", ex);
         }
         finally
         {
@@ -196,8 +191,9 @@ public partial class SettingsService : ObservableObject
     {
         try
         {
-            Directory.CreateDirectory(SettingsDirectory);
-            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, JsonOptions));
+            AppPaths.EnsureAppDataDirectory();
+            File.WriteAllText(AppPaths.SettingsFile,
+                JsonSerializer.Serialize(this, SettingsJsonContext.Default.SettingsService));
         }
         catch
         {
@@ -228,3 +224,7 @@ public partial class SettingsService : ObservableObject
         }
     }
 }
+
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(SettingsService))]
+internal partial class SettingsJsonContext : JsonSerializerContext;

@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Restore
         run: dotnet restore -p:Platform=x64 -r win-x64
@@ -29,17 +29,38 @@ jobs:
           -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableMsixTooling=true
 
-      - name: Package artifact
+      - name: Package self-contained zip
         shell: pwsh
         run: |
-          $publish = "bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\publish"
+          $publish = "bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\publish"
           Compress-Archive -Path "$publish\BrightFlyout.exe" -DestinationPath "BrightFlyout-win-x64.zip" -Force
 
-      - name: Upload artifact
+      - name: Publish (framework-dependent, minimal)
+        run: >-
+          dotnet publish -c Release -p:Platform=x64 -r win-x64 --no-self-contained
+          -p:WindowsAppSDKSelfContained=false -p:PublishDir=bin\fd-publish
+
+      - name: Package minimal zip
+        shell: pwsh
+        run: Compress-Archive -Path "bin\fd-publish\*" -DestinationPath "BrightFlyout-win-x64-minimal.zip" -Force
+
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install innosetup --yes --no-progress
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          if ("${{ github.ref_type }}" -ne "tag") { $version = "0.0.0" }
+          & $iscc installer.iss /DAppVersion=$version
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: BrightFlyout-win-x64
-          path: BrightFlyout-win-x64.zip
+          name: BrightFlyout-${{ github.sha }}
+          path: |
+            BrightFlyout-win-x64.zip
+            BrightFlyout-win-x64-minimal.zip
+            installer-out/BrightFlyoutSetup-*.exe
           retention-days: 30
 
       - name: Create GitHub Release
@@ -47,6 +68,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
-          gh release create ${{ github.ref_name }} BrightFlyout-win-x64.zip
+          gh release create ${{ github.ref_name }}
+          BrightFlyout-win-x64.zip BrightFlyout-win-x64-minimal.zip installer-out/BrightFlyoutSetup-*.exe
           --title "BrightFlyout ${{ github.ref_name }}"
           --generate-notes
