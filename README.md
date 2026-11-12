@@ -15,6 +15,8 @@ built-in one.
   controls the display whose slider was touched last (or the default display chosen
   in Settings at startup). Individual displays can be excluded from control in
   Settings, and the flyout can appear on the primary display or on all displays.
+  Hot-plugged displays are picked up automatically (WM_DISPLAYCHANGE, debounced);
+  Settings also has an explicit refresh button.
 - **Laptop support**: on mobile systems Windows consumes the brightness keys itself;
   a `WmiMonitorBrightnessEvent` watcher mirrors those changes into our OSD (and to
   all included displays when sync is on). Displays that answer neither DDC/CI nor
@@ -120,20 +122,25 @@ in-place upgrades (installing a newer `.msix` upgrades the app and keeps
 settings). Pick AOT for the tiny package; pick hybrid if internal laptop panel
 (WMI) control matters to you.
 
-### Installing the MSIX (one-time cert trust)
+### Installing / upgrading
 
-The package is signed with a self-signed certificate, so Windows requires the
-cert to be trusted once per machine (needs admin):
+Download the `.msix`, `BrightFlyout.cer` and `Install-BrightFlyout.ps1` into one
+folder, then run the script:
 
 ```powershell
-# one-time, in an elevated terminal, using the BrightFlyout.cer shipped with the release:
-Import-Certificate -FilePath BrightFlyout.cer -CertStoreLocation Cert:\LocalMachine\TrustedPeople
-
-# then double-click the .msix, or:
-Add-AppxPackage .\BrightFlyout_1.0.3.0_x64.msix
+.\Install-BrightFlyout.ps1
 ```
 
-Without this step, installation fails with `0x800B0109` (untrusted root).
+The script handles the awkward parts of raw MSIX deployment: it trusts the
+self-signed cert once per machine (elevating only for the cert import — without
+this, installs fail with `0x800B0109`), closes a running app instance (avoids
+`0x80073D02`), and replaces same-version rebuilds (avoids `0x80073CFB`), so
+iterating does not require version bumps. Upgrades otherwise happen in place
+and keep settings.
+
+Manual equivalent if you prefer: trust the cert once
+(`Import-Certificate ... Cert:\LocalMachine\TrustedPeople`, elevated), then
+`Add-AppxPackage .\BrightFlyout_*.msix`.
 
 ### Releasing
 

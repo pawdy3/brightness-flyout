@@ -34,8 +34,9 @@ internal sealed class WmiDisplayController : IDisplayController
                 .Where(n => n.Length > 0)
                 .ToList();
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Write("WMI brightness enumeration failed", ex);
             return [];
         }
     }

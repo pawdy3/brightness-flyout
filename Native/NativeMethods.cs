@@ -18,6 +18,7 @@ internal static class NativeMethods
     public const int WM_SYSKEYUP = 0x0105;
     public const int WM_INPUT = 0x00FF;
     public const int WM_NCCALCSIZE = 0x0083;
+    public const int WM_DISPLAYCHANGE = 0x007E;
 
     public const int GWL_EXSTYLE = -20;
     public const long WS_EX_LAYERED = 0x00080000;

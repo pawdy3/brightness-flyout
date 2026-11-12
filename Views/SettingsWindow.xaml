@@ -40,7 +40,27 @@
                     BorderThickness="1"
                     CornerRadius="8">
                     <StackPanel Spacing="8">
-                        <TextBlock FontWeight="SemiBold" Text="Displays" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="Displays" />
+                            <Button
+                                x:Name="RefreshDisplaysButton"
+                                Grid.Column="1"
+                                Padding="6,2"
+                                HorizontalAlignment="Right"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="OnRefreshDisplaysClick"
+                                ToolTipService.ToolTip="Refresh display list">
+                                <FontIcon
+                                    FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                    FontSize="12"
+                                    Glyph="&#xE72C;" />
+                            </Button>
+                        </Grid>
                         <!-- Rows (DisplaySettingsRow) are added to Items in code; see DisplayRowControl. -->
                         <ItemsControl x:Name="DisplayStatusItems" />
                         <TextBlock

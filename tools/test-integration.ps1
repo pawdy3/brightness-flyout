@@ -66,6 +66,11 @@ public class TestNative {
     [DllImport("user32.dll")] public static extern void keybd_event(byte bVk, byte bScan, uint f, UIntPtr e);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowExW(IntPtr parent, IntPtr childAfter, string cls, string title);
     [DllImport("shell32.dll")] public static extern int Shell_NotifyIconGetRect(ref NOTIFYICONIDENTIFIER id, out RECT rect);
+    [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT p);
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT { public int X, Y; }
 
     [StructLayout(LayoutKind.Sequential)]
     public struct RECT { public int Left, Top, Right, Bottom; }
@@ -167,6 +172,10 @@ try {
     Record-Test 'single instance: mutex exit is logged' (Test-LogContains 'single-instance mutex')
 
     # --- Brightness down: OSD appears + chain logged ---
+    # Park the cursor far from the OSD region: pointer-over pauses auto-hide by design.
+    [TestNative]::GetCursorPos([ref]($savedCursor = New-Object TestNative+POINT)) | Out-Null
+    [TestNative]::SetCursorPos(5, 5) | Out-Null
+
     Capture-OsdRegion $snapA
     Send-BrightnessKey 0x9E
     $stepped = Wait-For { Test-LogContains 'Brightness -> 45% (Simulated monitor)' } -TimeoutMs 5000
@@ -184,6 +193,7 @@ try {
     # --- OSD auto-hide (default duration 2 s) ---
     Start-Sleep -Milliseconds 3500
     Capture-OsdRegion $snapB
+    [TestNative]::SetCursorPos($savedCursor.X, $savedCursor.Y) | Out-Null
     $diff = Get-RegionDiff $snapA $snapB
     Record-Test 'OSD auto-hides after timeout' ($diff -lt 0.005) ("region diff {0:P1}" -f $diff)
 

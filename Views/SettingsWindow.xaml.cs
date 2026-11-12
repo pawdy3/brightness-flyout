@@ -272,6 +272,19 @@ public sealed partial class SettingsWindow : Window
         _app.Controller.PreviewOsd();
     }
 
+    private async void OnRefreshDisplaysClick(object sender, RoutedEventArgs e)
+    {
+        RefreshDisplaysButton.IsEnabled = false;
+        try
+        {
+            await _app.Controller.RefreshDisplaysAsync();
+        }
+        finally
+        {
+            RefreshDisplaysButton.IsEnabled = true;
+        }
+    }
+
     private void OnPercentToggled(object sender, RoutedEventArgs e)
     {
         if (!_initializing)

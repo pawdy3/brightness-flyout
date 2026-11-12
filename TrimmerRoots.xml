@@ -1,0 +1,8 @@
+<linker>
+  <!-- System.Management's WmiNetUtilsHelper loads COM marshaling helpers via
+       reflection in its static constructor; trimming removes them from CoreLib
+       (TypeLoadException: System.StubHelpers.InterfaceMarshaler). Root them. -->
+  <assembly fullname="System.Private.CoreLib">
+    <type fullname="System.StubHelpers.*" preserve="all" />
+  </assembly>
+</linker>

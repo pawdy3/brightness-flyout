@@ -6,7 +6,7 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>BrightFlyout</RootNamespace>
     <AssemblyName>BrightFlyout</AssemblyName>
-    <Version>1.0.4</Version>
+    <Version>1.0.5</Version>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x64</Platforms>
@@ -22,6 +22,10 @@
          framework resolves the host culture when a window is first shown and
          throws CultureNotFoundException under invariant mode. -->
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Trimming disables built-in COM interop, but System.Management (WMI) is
+         built on it. Re-enable so the internal-panel path works in trimmed builds.
+         (NativeAOT cannot support built-in COM at all - WMI stays AOT-excluded.) -->
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
   </PropertyGroup>
 
   <!-- MSIX packaging: framework-dependent Windows App SDK (the Microsoft.WindowsAppRuntime.2
@@ -31,7 +35,6 @@
     <AppxBundle>Never</AppxBundle>
     <AppxSymbolPackageEnabled>false</AppxSymbolPackageEnabled>
     <UapAppxPackageBuildMode>SideloadOnly</UapAppxPackageBuildMode>
-    <AppxAutoIncrementPackageRevision>false</AppxAutoIncrementPackageRevision>
     <DefaultLanguage>en-US</DefaultLanguage>
     <AppxPackageDir>AppPackages\</AppxPackageDir>
     <!-- Local convenience: sign with the dev cert if present (CI passes this explicitly). -->
@@ -51,6 +54,11 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\app.ico" LogicalName="BrightFlyout.app.ico" />
+    <!-- System.Management's static initializers use reflection-based delegate
+         loading that trimming breaks (REGDB/TypeInitializationException at
+         runtime). Root the assembly whole so the WMI path survives trimming. -->
+    <TrimmerRootAssembly Include="System.Management" />
+    <TrimmerRootDescriptor Include="TrimmerRoots.xml" />
   </ItemGroup>
 
   <!-- Pinned for reproducible CI builds. -->

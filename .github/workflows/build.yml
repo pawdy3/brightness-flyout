@@ -85,6 +85,7 @@ jobs:
           Copy-Item (Get-Item out/aot/**/*_x64.msix).FullName staging/BrightFlyout_AOT_x64.msix
           Copy-Item (Get-Item out/hybrid/**/*_x64.msix).FullName staging/BrightFlyout_Hybrid_x64.msix
           Copy-Item BrightFlyout.cer staging/
+          Copy-Item tools/Install-BrightFlyout.ps1 staging/
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -100,6 +101,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           gh release create ${{ github.ref_name }}
-          staging/BrightFlyout_AOT_x64.msix staging/BrightFlyout_Hybrid_x64.msix staging/BrightFlyout.cer
+          staging/BrightFlyout_AOT_x64.msix staging/BrightFlyout_Hybrid_x64.msix
+          staging/BrightFlyout.cer staging/Install-BrightFlyout.ps1
           --title "BrightFlyout ${{ github.ref_name }}"
           --generate-notes

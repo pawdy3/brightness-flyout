@@ -30,6 +30,7 @@ internal sealed class WmiBrightnessWatcher : IDisposable
                 "SELECT * FROM WmiMonitorBrightnessEvent");
             _watcher.EventArrived += OnEventArrived;
             _watcher.Start();
+            Log.Write("WMI brightness watcher started");
         }
         catch (Exception ex)
         {

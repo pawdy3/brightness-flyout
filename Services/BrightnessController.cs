@@ -19,6 +19,8 @@ internal sealed class BrightnessController : IDisposable
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly DispatcherQueueTimer _suppressWatchdog;
     private readonly DispatcherQueueTimer _restoreTimer;
+    private readonly DispatcherQueueTimer _hotplugTimer;
+    private NativeMethods.SubclassProc? _displayChangeSubclassProc;
 
     /// <summary>Raised (on the UI thread) whenever the target display's brightness changes.</summary>
     public event Action<int>? BrightnessChanged;
@@ -56,6 +58,27 @@ internal sealed class BrightnessController : IDisposable
         _restoreTimer.IsRepeating = false;
         _restoreTimer.Interval = TimeSpan.FromMilliseconds(400);
         _restoreTimer.Tick += (_, _) => NativeOsdSuppressor.Restore();
+
+        // Monitor plug/unplug arrives as a burst of WM_DISPLAYCHANGE messages;
+        // coalesce into a single re-enumeration.
+        _hotplugTimer = _dispatcherQueue.CreateTimer();
+        _hotplugTimer.IsRepeating = false;
+        _hotplugTimer.Interval = TimeSpan.FromMilliseconds(800);
+        _hotplugTimer.Tick += (_, _) => _ = RefreshDisplaysAsync();
+    }
+
+    private IntPtr DisplayChangeSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam, UIntPtr uIdSubclass, UIntPtr dwRefData)
+    {
+        if (uMsg == NativeMethods.WM_DISPLAYCHANGE)
+        {
+            _dispatcherQueue.TryEnqueue(() =>
+            {
+                _hotplugTimer.Stop();
+                _hotplugTimer.Start();
+            });
+        }
+
+        return NativeMethods.DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
 
     private void OnOsdAutoHidden()
@@ -68,6 +91,12 @@ internal sealed class BrightnessController : IDisposable
     public void Start()
     {
         _hook.Install(_osd.Hwnd);
+
+        // The OSD window is always alive (hidden), so it receives display-change
+        // broadcasts even with no visible UI.
+        _displayChangeSubclassProc = DisplayChangeSubclassProc;
+        NativeMethods.SetWindowSubclass(_osd.Hwnd, _displayChangeSubclassProc, (UIntPtr)3, UIntPtr.Zero);
+
         _ = RefreshDisplaysAsync();
     }
 
@@ -225,6 +254,13 @@ internal sealed class BrightnessController : IDisposable
         _settings.PropertyChanged -= OnSettingsPropertyChanged;
         _suppressWatchdog.Stop();
         _restoreTimer.Stop();
+        _hotplugTimer.Stop();
+        if (_displayChangeSubclassProc is not null)
+        {
+            NativeMethods.RemoveWindowSubclass(_osd.Hwnd, _displayChangeSubclassProc, (UIntPtr)3);
+            _displayChangeSubclassProc = null;
+        }
+
         _wmiWatcher.Dispose();
         _hook.Dispose();
         NativeOsdSuppressor.Restore();

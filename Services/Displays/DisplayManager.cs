@@ -65,9 +65,10 @@ public sealed class DisplayManager
             return SimulatedDisplayController.CreateSet();
         }
 
+        // Simple union listing: every physical monitor that answers DDC/CI, plus
+        // every WMI brightness instance (internal panels). No pairing or phantom
+        // filtering - duplicate/dead entries are accepted for now.
         var controllers = new List<IDisplayController>();
-        var wmiInstances = WmiDisplayController.EnumerateInstanceNames();
-        int wmiIndex = 0;
 
         var physical = DdcCiDisplayController.EnumerateAll();
         try
@@ -83,16 +84,9 @@ public sealed class DisplayManager
                 {
                     controllers.Add(new DdcCiDisplayController(deviceName, description));
                 }
-                else if (wmiIndex < wmiInstances.Count)
-                {
-                    // No DDC/CI: assume internal panel, pair with the next WMI instance.
-                    controllers.Add(new WmiDisplayController(wmiInstances[wmiIndex++]));
-                }
                 else
                 {
-                    // Neither transport works: phantom/stale monitor entry (common on
-                    // laptops, e.g. duplicate "Generic PnP Monitor"). Don't list it.
-                    Log.Write($"Skipping unresponsive display '{description}' ({deviceName})");
+                    Log.Write($"Display '{description}' ({deviceName}) does not answer DDC/CI");
                 }
             }
         }
@@ -101,20 +95,13 @@ public sealed class DisplayManager
             DdcCiDisplayController.DestroyAll(physical);
         }
 
-        // Some internal panels are not exposed as physical monitors at all, so
-        // nothing above pairs with their WMI instance. Leftover instances are
-        // internal panels: add them directly.
-        int pairedCount = wmiIndex;
-        while (wmiIndex < wmiInstances.Count)
+        var wmiInstances = WmiDisplayController.EnumerateInstanceNames();
+        foreach (var instance in wmiInstances)
         {
-            controllers.Add(new WmiDisplayController(wmiInstances[wmiIndex++]));
+            controllers.Add(new WmiDisplayController(instance));
         }
 
-        if (wmiInstances.Count > 0)
-        {
-            Log.Write($"WMI brightness instances: {wmiInstances.Count} ({pairedCount} paired to a physical monitor, {wmiInstances.Count - pairedCount} added directly)");
-        }
-
+        Log.Write($"Enumeration: {controllers.OfType<DdcCiDisplayController>().Count()} DDC/CI + {wmiInstances.Count} WMI display(s)");
         return controllers;
     }
 

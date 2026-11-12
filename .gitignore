@@ -5,6 +5,7 @@ obj/
 AppPackages/
 AppPackagesHybrid/
 AppPackagesAotFd/
+laptop-package/
 certs/
 cert.pfx
 BrightFlyout.cer
