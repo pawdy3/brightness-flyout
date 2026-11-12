@@ -235,16 +235,20 @@ internal sealed class BrightnessController : IDisposable
                 _wmiRevertingTo = null; // echo lost, or a real change overtook it
             }
 
-            if (!wmiDisplay.IsIncluded)
+            var target = Displays.Target;
+
+            if (!ReferenceEquals(target, wmiDisplay) && !_settings.SyncMonitors)
             {
-                // The panel is excluded, but Windows changed it anyway (monitor.sys
-                // handles the ACPI hotkey in kernel mode - there is no user-mode or
-                // registry opt-out). Forward each event's delta to the actual target
-                // display (native steps arrive as +-10, vendor smooth-hold as +-1,
-                // so forward the delta, not a fixed step) and revert the panel
-                // immediately - per event, which users find far less confusing than
-                // a post-burst rollback. The panel model stays pinned at the
-                // pre-press value.
+                // Windows changed the panel, but the keyboard targets another
+                // display - the key press should never have touched this panel
+                // (monitor.sys handles the ACPI hotkey in kernel mode; there is no
+                // user-mode opt-out). This holds whether the panel is excluded
+                // entirely or merely included-but-not-targeted. Forward each
+                // event's delta to the actual target (native steps arrive as +-10,
+                // vendor smooth-hold as +-1, so forward the delta, not a fixed
+                // step) and revert the panel immediately - per event, which users
+                // find far less confusing than a post-burst rollback. The panel
+                // model stays pinned at the pre-press value.
                 var delta = value - (_lastWmiEventValue ?? value);
                 _lastWmiEventValue = value;
                 if (delta == 0)
@@ -252,37 +256,28 @@ internal sealed class BrightnessController : IDisposable
                     return;
                 }
 
-                if (Displays.Target is { } target && target != wmiDisplay)
+                if (target is not null)
                 {
                     ApplyBrightness(Math.Clamp(target.Brightness + delta, 0, 100));
                 }
 
                 var baseline = wmiDisplay.Brightness;
-                Log.Write($"Reverting Windows-made change on excluded panel -> {baseline}%");
+                Log.Write($"Reverting Windows-made change on non-target panel -> {baseline}%");
                 _wmiRevertingTo = baseline;
                 wmiDisplay.Controller.SetBrightness(baseline);
                 return;
             }
 
+            // The panel is the target (or sync is on): accept the change.
             if (Math.Abs(wmiDisplay.Brightness - value) <= 1)
             {
                 return; // feedback from our own write, or nothing to do
             }
 
-            var previousValue = _lastWmiEventValue ?? wmiDisplay.Brightness;
             wmiDisplay.SetBrightnessSilently(value);
             _lastWmiEventValue = value;
             // Implicit target: applies only while no configured default is available.
             Displays.SetAutomaticTarget(wmiDisplay.Id);
-
-            var currentTarget = Displays.Target;
-            if (currentTarget is not null && currentTarget != wmiDisplay && !_settings.SyncMonitors)
-            {
-                // The internal panel is included (allowed to change), but the
-                // keyboard targets another display: mirror the delta there too.
-                ApplyBrightness(Math.Clamp(currentTarget.Brightness + (value - previousValue), 0, 100));
-                return;
-            }
 
             if (_settings.SyncMonitors)
             {
