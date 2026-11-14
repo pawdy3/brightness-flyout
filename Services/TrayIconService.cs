@@ -52,6 +52,10 @@ internal sealed unsafe class TrayIconService : IDisposable
     /// device-interface arrival/removal (input-source switches included).</summary>
     public event Action? DisplayChangeBroadcast;
 
+    /// <summary>Raised on the UI thread with the new panel brightness (0-100) when
+    /// Windows broadcasts a GUID_DISPLAY_BRIGHTNESS power-setting change.</summary>
+    public event Action<int>? BrightnessSettingChanged;
+
     public TrayIconService(string tooltip, HICON hIcon)
     {
         _tooltip = tooltip;
@@ -65,7 +69,10 @@ internal sealed unsafe class TrayIconService : IDisposable
     }
 
     /// <summary>Display sleep/wake and system resume are display-link events too
-    /// (DDC/CI links commonly die across them) - refresh on those.</summary>
+    /// (DDC/CI links commonly die across them) - refresh on those. Panel
+    /// brightness changes are subscribed as well: the GUID_DISPLAY_BRIGHTNESS
+    /// power-setting broadcast complements the WMI event, which some laptop
+    /// drivers deliver unreliably.</summary>
     private void RegisterPowerNotifications()
     {
         if (_hwnd.IsNull)
@@ -73,7 +80,7 @@ internal sealed unsafe class TrayIconService : IDisposable
             return;
         }
 
-        foreach (var guid in new[] { PInvoke.GUID_CONSOLE_DISPLAY_STATE, PInvoke.GUID_MONITOR_POWER_ON })
+        foreach (var guid in new[] { PInvoke.GUID_CONSOLE_DISPLAY_STATE, PInvoke.GUID_MONITOR_POWER_ON, Win32.DisplayBrightnessPowerSetting })
         {
             var g = guid;
             var notify = PInvoke.RegisterPowerSettingNotification(
@@ -83,6 +90,26 @@ internal sealed unsafe class TrayIconService : IDisposable
                 _powerNotifies.Add(notify);
             }
         }
+    }
+
+    private static bool TryGetBrightnessSetting(WPARAM wParam, LPARAM lParam, out int brightness)
+    {
+        brightness = 0;
+        if ((uint)wParam.Value != PInvoke.PBT_POWERSETTINGCHANGE || lParam.Value == 0)
+        {
+            return false;
+        }
+
+        var setting = (POWERBROADCAST_SETTING*)lParam.Value;
+        if (setting->PowerSetting != Win32.DisplayBrightnessPowerSetting || setting->DataLength < 4)
+        {
+            return false;
+        }
+
+        // Payload is a DWORD with the new brightness, at offset 20
+        // (16-byte GUID + 4-byte DataLength).
+        brightness = Math.Clamp(Marshal.ReadInt32((IntPtr)lParam.Value + 20), 0, 100);
+        return true;
     }
 
     private static bool IsDisplayPowerChange(WPARAM wParam, LPARAM lParam)
@@ -287,10 +314,19 @@ internal sealed unsafe class TrayIconService : IDisposable
             return PInvoke.DefWindowProc(hWnd, msg, wParam, lParam);
         }
 
-        if (msg == PInvoke.WM_POWERBROADCAST && IsDisplayPowerChange(wParam, lParam))
+        if (msg == PInvoke.WM_POWERBROADCAST)
         {
-            _instance?.DisplayChangeBroadcast?.Invoke();
-            return (LRESULT)1; // TRUE: power-setting messages expect TRUE
+            if (TryGetBrightnessSetting(wParam, lParam, out var brightness))
+            {
+                _instance?.BrightnessSettingChanged?.Invoke(brightness);
+                return (LRESULT)1; // power-setting messages expect TRUE
+            }
+
+            if (IsDisplayPowerChange(wParam, lParam))
+            {
+                _instance?.DisplayChangeBroadcast?.Invoke();
+                return (LRESULT)1;
+            }
         }
 
         if (msg == _wmTaskbarCreated && _wmTaskbarCreated != 0)

@@ -21,6 +21,10 @@ internal static class Win32
     // NT status space of hid.dll: HIDP_STATUS_SUCCESS.
     public const int HidpStatusSuccess = 0x00110000;
 
+    // "Display brightness" power setting (not part of win32metadata).
+    public static readonly Guid DisplayBrightnessPowerSetting =
+        new("aded5e82-b909-4619-9949-f5d71dac0bcb");
+
     /// <summary>Writes a null-terminated string into a fixed-size char buffer
     /// (CsWin32 inline array, e.g. NOTIFYICONDATAW.szTip).</summary>
     public static void WriteFixedString(Span<char> buffer, string value)

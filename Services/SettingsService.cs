@@ -129,6 +129,14 @@ public partial class SettingsService : ObservableObject
     [JsonPropertyName("excludedMonitorIds")]
     public partial List<string> ExcludedMonitorIds { get; set; } = [];
 
+    /// <summary>Laptop only: Windows handles internal-panel brightness keys in
+    /// kernel mode. When the panel is not the keyboard target, undo Windows'
+    /// change and drive the target display instead. Off by default: vendor
+    /// drivers deliver these events unreliably, which can mis-track brightness.</summary>
+    [ObservableProperty]
+    [JsonPropertyName("revertNonTargetPanelChanges")]
+    public partial bool RevertNonTargetPanelChanges { get; set; }
+
     /// <summary>When on, any brightness change is applied to all included displays.</summary>
     [ObservableProperty]
     [JsonPropertyName("syncMonitors")]

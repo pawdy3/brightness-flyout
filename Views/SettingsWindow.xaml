@@ -144,6 +144,17 @@
                                 </controls:SettingsCard>
                             </controls:SettingsExpander.Items>
                         </controls:SettingsExpander>
+
+                        <controls:SettingsCard
+                            Margin="0,4,0,0"
+                            Header="Undo Windows brightness changes (laptops)"
+                            Description="On laptops, Windows handles brightness keys itself before any app can intercept them. When on and the internal panel isn't the keyboard target, BrightFlyout undoes the change Windows makes - best effort, through WMI only - and drives the target display instead. Off by default: some laptop drivers report panel changes unreliably, which can mis-track brightness.">
+                            <ToggleSwitch
+                                x:Name="RevertPanelToggle"
+                                IsOn="{x:Bind Settings.RevertNonTargetPanelChanges, Mode=TwoWay}"
+                                OffContent=""
+                                OnContent="" />
+                        </controls:SettingsCard>
                     </StackPanel>
 
                     <!-- ==================== Flyout ==================== -->

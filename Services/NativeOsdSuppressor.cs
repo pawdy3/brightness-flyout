@@ -25,15 +25,52 @@ internal static unsafe class NativeOsdSuppressor
     private static readonly HashSet<HWND> _legacyOsdElements = [];
     private static bool _loggedLegacySearch;
 
-    // Out-of-context WinEvent hook, armed while suppression is active. Polling
-    // alone hides the OSD up to a watchdog interval too late (visible flash);
-    // the show-event fires before the window gets to paint.
+    // Out-of-context WinEvent hook on explorer (the OSD host process), armed for
+    // the process lifetime. Polling alone hides the OSD up to a watchdog interval
+    // too late (visible flash); the show-event fires before the window gets to
+    // paint. Beyond suppression it also feeds NativeOsdShown, which the laptop
+    // mirror path uses to detect key presses that changed nothing (panel pinned
+    // at 0/100 - no brightness event fires, but the native OSD still appears).
     private static HWINEVENTHOOK _winEventHook;
+    private static bool _suppressRequested;
+
+    /// <summary>Raised (on the hooking thread) whenever the native shell OSD is
+    /// shown - regardless of whether suppression is active.</summary>
+    public static event Action? NativeOsdShown;
 
     public static bool IsSuppressed => !_nativeOsdElement.IsNull || _legacyOsdElements.Count > 0;
 
+    /// <summary>Arms the explorer-scoped show hook. Called once at startup so
+    /// boundary-press detection works even before the first suppression.</summary>
+    public static void EnsureWatching()
+    {
+        if (!_winEventHook.IsNull)
+        {
+            return;
+        }
+
+        // Scope to explorer: a session-wide show hook would fire for every
+        // window shown by any process.
+        uint explorerPid = 0;
+        var trayWnd = PInvoke.FindWindow("Shell_TrayWnd", null);
+        if (!trayWnd.IsNull)
+        {
+            unsafe
+            {
+                PInvoke.GetWindowThreadProcessId(trayWnd, &explorerPid);
+            }
+        }
+
+        _winEventHook = PInvoke.SetWinEventHook(
+            PInvoke.EVENT_OBJECT_SHOW, PInvoke.EVENT_OBJECT_SHOW,
+            default(HMODULE), &OnWinEvent, explorerPid, 0, PInvoke.WINEVENT_OUTOFCONTEXT);
+    }
+
     public static void Suppress()
     {
+        _suppressRequested = true;
+        EnsureWatching();
+
         // Strictly OS-branched: no fallback mixing between the two host models.
         if (App.IsWindows11)
         {
@@ -43,20 +80,6 @@ internal static unsafe class NativeOsdSuppressor
         {
             SuppressLegacyOsd();
         }
-
-        ArmShowEventHook();
-    }
-
-    private static void ArmShowEventHook()
-    {
-        if (!_winEventHook.IsNull)
-        {
-            return;
-        }
-
-        _winEventHook = PInvoke.SetWinEventHook(
-            PInvoke.EVENT_OBJECT_SHOW, PInvoke.EVENT_OBJECT_SHOW,
-            default(HMODULE), &OnWinEvent, 0, 0, PInvoke.WINEVENT_OUTOFCONTEXT);
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -71,14 +94,24 @@ internal static unsafe class NativeOsdSuppressor
         // Win11: explorer re-shows the island itself.
         if (hwnd == _nativeOsdElement)
         {
-            ApplyWin11Suppression();
+            NativeOsdShown?.Invoke();
+            if (_suppressRequested)
+            {
+                ApplyWin11Suppression();
+            }
+
             return;
         }
 
         // Win10: the same NativeHWNDHost is re-shown on every key press.
         if (_legacyOsdElements.Contains(hwnd))
         {
-            PInvoke.ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_HIDE);
+            NativeOsdShown?.Invoke();
+            if (_suppressRequested)
+            {
+                PInvoke.ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_HIDE);
+            }
+
             return;
         }
 
@@ -87,6 +120,12 @@ internal static unsafe class NativeOsdSuppressor
         if (length == 0
             || !className[..length].SequenceEqual("NativeHWNDHost")
             || PInvoke.FindWindowEx(hwnd, default, "DirectUIHWND", null).IsNull)
+        {
+            return;
+        }
+
+        NativeOsdShown?.Invoke();
+        if (!_suppressRequested)
         {
             return;
         }
@@ -199,12 +238,10 @@ internal static unsafe class NativeOsdSuppressor
 
     public static void Restore()
     {
-        if (!_winEventHook.IsNull)
-        {
-            PInvoke.UnhookWinEvent(_winEventHook);
-            _winEventHook = default;
-        }
+        _suppressRequested = false;
 
+        // The show-event hook stays armed (process-lifetime, cleaned up on exit):
+        // boundary-press detection needs it even while nothing is suppressed.
         foreach (var hwnd in _legacyOsdElements)
         {
             PInvoke.ShowWindow(hwnd, SHOW_WINDOW_CMD.SW_SHOWNOACTIVATE);

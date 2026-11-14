@@ -43,12 +43,14 @@ DBT_DEVICEREMOVECOMPLETE
 DEV_BROADCAST_HDR_DEVICE_TYPE
 GUID_DEVINTERFACE_MONITOR
 
-// power setting notifications (display sleep/wake, resume)
+// power setting notifications (display sleep/wake, resume, panel brightness)
 RegisterPowerSettingNotification
 UnregisterPowerSettingNotification
 POWERBROADCAST_SETTING
 GUID_CONSOLE_DISPLAY_STATE
 GUID_MONITOR_POWER_ON
+FindWindow
+GetWindowThreadProcessId
 WM_POWERBROADCAST
 PBT_POWERSETTINGCHANGE
 PBT_APMRESUMEAUTOMATIC

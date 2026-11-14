@@ -24,11 +24,18 @@ internal sealed class BrightnessController : IDisposable
     private readonly DispatcherQueueTimer _restoreTimer;
     private readonly DispatcherQueueTimer _hotplugTimer;
     private readonly DispatcherQueueTimer _pollTimer;
+    private readonly DispatcherQueueTimer _boundaryTimer;
     private string _lastRefreshFingerprint = string.Empty;
 
-    // Excluded-panel revert state (see OnWmiBrightnessChanged).
+    // Non-target-panel revert state (see OnPanelBrightnessChanged).
     private int? _wmiRevertingTo;
-    private int? _lastWmiEventValue;
+    private int? _lastPanelEventValue;
+    private long _lastProcessedEventTick;
+
+    // Boundary-press detection (see the region below): set when a native-OSD
+    // show is pending classification, cleared when a panel brightness event is
+    // attributed to that show.
+    private bool _boundaryCheckPending;
 
     /// <summary>Raised (on the UI thread) whenever the target display's brightness changes.</summary>
     public event Action<int>? BrightnessChanged;
@@ -47,7 +54,7 @@ internal sealed class BrightnessController : IDisposable
         _hook.BrightnessStepRequested += OnBrightnessStepRequested;
         _osd.AutoHidden += OnOsdAutoHidden;
         _settings.PropertyChanged += OnSettingsPropertyChanged;
-        _wmiWatcher.BrightnessChanged += OnWmiBrightnessChanged;
+        _wmiWatcher.BrightnessChanged += OnWmiBrightnessEvent;
 
         // Explorer can create the native OSD island a moment *after* the key press,
         // so a single suppress attempt can miss it. While our OSD is visible, keep
@@ -61,11 +68,30 @@ internal sealed class BrightnessController : IDisposable
         };
 
         // Bring the native OSD back only after our flyout has fully disappeared,
-        // otherwise both are on screen at once.
+        // otherwise both are on screen at once. Win10's legacy host needs a bit
+        // more: restoring re-shows its stale content, which reads as a flash of a
+        // second OSD when the handoff is too quick.
         _restoreTimer = _dispatcherQueue.CreateTimer();
         _restoreTimer.IsRepeating = false;
-        _restoreTimer.Interval = TimeSpan.FromMilliseconds(400);
+        _restoreTimer.Interval = TimeSpan.FromMilliseconds(App.IsWindows11 ? 400 : 600);
         _restoreTimer.Tick += (_, _) => NativeOsdSuppressor.Restore();
+
+        // One-shot check for boundary presses (panel pinned at 0/100: Windows
+        // swallows the key without a brightness change, but still shows its OSD).
+        _boundaryTimer = _dispatcherQueue.CreateTimer();
+        _boundaryTimer.IsRepeating = false;
+        _boundaryTimer.Interval = TimeSpan.FromMilliseconds(250);
+        _boundaryTimer.Tick += async (_, _) =>
+        {
+            try
+            {
+                await HandleBoundaryPressAsync();
+            }
+            catch (Exception ex)
+            {
+                Log.Write("Boundary press check failed", ex);
+            }
+        };
 
         // Monitor plug/unplug arrives as a burst of WM_DISPLAYCHANGE messages;
         // coalesce into a single re-enumeration.
@@ -112,7 +138,11 @@ internal sealed class BrightnessController : IDisposable
             _hook.Install(tray.Hwnd);
             tray.RawInputMessage += _hook.ProcessRawInputMessage;
             tray.DisplayChangeBroadcast += OnDisplayChangeBroadcast;
+            tray.BrightnessSettingChanged += OnPowerBrightnessEvent;
         }
+
+        NativeOsdSuppressor.NativeOsdShown += OnNativeOsdShown;
+        NativeOsdSuppressor.EnsureWatching();
 
         _pollTimer.Start();
 
@@ -205,12 +235,37 @@ internal sealed class BrightnessController : IDisposable
     }
 
     /// <summary>Laptop path: Windows itself changed the internal panel brightness
-    /// (mobile systems consume the HID usages before any hook). Mirror the change.</summary>
-    private void OnWmiBrightnessChanged(int value)
+    /// (mobile systems consume the HID usages before any hook). Mirror the change.
+    /// Fed by two sources: the WMI brightness event, and the GUID_DISPLAY_BRIGHTNESS
+    /// power-setting broadcast (some drivers deliver WMI events unreliably).</summary>
+    private void OnWmiBrightnessEvent(int value) => OnPanelBrightnessChanged(value, "WMI");
+
+    private void OnPowerBrightnessEvent(int value) => OnPanelBrightnessChanged(value, "power");
+
+    private void OnPanelBrightnessChanged(int value, string source)
     {
-        Log.Write($"WMI brightness event -> {value}%");
         _dispatcherQueue.TryEnqueue(() =>
         {
+            // A panel change attributed to a pending boundary check: the native
+            // OSD that triggered the check was a real brightness change, not a
+            // boundary press. (FIFO on this queue: a key's event runs before the
+            // boundary timer tick it would otherwise trip.)
+            _boundaryCheckPending = false;
+
+            // Most changes arrive on BOTH channels (WMI event + power broadcast);
+            // the second report carries the same value. Dropping it matters: it
+            // would otherwise be mistaken for a real change and corrupt the
+            // revert echo-swallow state. (Compared against the last *processed*
+            // event, so a genuine repeat of the same value seconds later still
+            // goes through.)
+            var now = Environment.TickCount64;
+            if (_lastPanelEventValue == value && now - _lastProcessedEventTick < 500)
+            {
+                return;
+            }
+
+            _lastProcessedEventTick = now;
+            Log.Write($"Panel brightness event ({source}) -> {value}%");
             var wmiDisplay = Displays.Displays.FirstOrDefault(d => d.Controller is WmiDisplayController);
             if (wmiDisplay is null)
             {
@@ -223,7 +278,7 @@ internal sealed class BrightnessController : IDisposable
                 {
                     // Feedback echo of our own revert write: swallow it.
                     _wmiRevertingTo = null;
-                    _lastWmiEventValue = value;
+                    _lastPanelEventValue = value;
                     wmiDisplay.SetBrightnessSilently(value);
                     return;
                 }
@@ -233,7 +288,9 @@ internal sealed class BrightnessController : IDisposable
 
             var target = Displays.Target;
 
-            if (!ReferenceEquals(target, wmiDisplay) && !_settings.SyncMonitors)
+            if (_settings.RevertNonTargetPanelChanges
+                && !ReferenceEquals(target, wmiDisplay)
+                && !_settings.SyncMonitors)
             {
                 // Windows changed the panel, but the keyboard targets another
                 // display - the key press should never have touched this panel
@@ -245,8 +302,8 @@ internal sealed class BrightnessController : IDisposable
                 // step) and revert the panel immediately - per event, which users
                 // find far less confusing than a post-burst rollback. The panel
                 // model stays pinned at the pre-press value.
-                var delta = value - (_lastWmiEventValue ?? value);
-                _lastWmiEventValue = value;
+                var delta = value - (_lastPanelEventValue ?? value);
+                _lastPanelEventValue = value;
                 if (delta == 0)
                 {
                     return;
@@ -264,14 +321,17 @@ internal sealed class BrightnessController : IDisposable
                 return;
             }
 
-            // The panel is the target (or sync is on): accept the change.
+            // Accept the change: the panel is the target, sync is on, or the
+            // non-target revert is disabled (the default - vendor drivers deliver
+            // these events unreliably, so a mis-tracking revert path would do
+            // more harm than letting Windows own the panel).
             if (Math.Abs(wmiDisplay.Brightness - value) <= 1)
             {
                 return; // feedback from our own write, or nothing to do
             }
 
             wmiDisplay.SetBrightnessSilently(value);
-            _lastWmiEventValue = value;
+            _lastPanelEventValue = value;
             // Implicit target: applies only while no configured default is available.
             Displays.SetAutomaticTarget(wmiDisplay.Id);
 
@@ -286,6 +346,83 @@ internal sealed class BrightnessController : IDisposable
             BrightnessChanged?.Invoke(value);
         });
     }
+
+    #region Boundary presses (panel pinned at 0/100)
+
+    // When the panel is already at 0 or 100, Windows swallows the matching key
+    // press without changing anything - no brightness event fires, so the mirror
+    // path never runs. The one observable signal left is the native OSD, which
+    // Windows shows anyway. A show not accompanied by a brightness event is a
+    // boundary press; step the target in the clamped direction.
+    //
+    // Race-free matching, no wall-clock windows: the show and any accompanying
+    // brightness event are both marshalled onto this same DispatcherQueue, and
+    // the timer tick that decides is queued behind them - so by tick time the
+    // event handler has either run (clearing _boundaryCheckPending) or there
+    // genuinely was no event.
+
+    private void OnNativeOsdShown()
+    {
+        _dispatcherQueue.TryEnqueue(() =>
+        {
+            var panel = Displays.Displays.FirstOrDefault(d => d.Controller is WmiDisplayController);
+            if (panel is null
+                || ReferenceEquals(Displays.Target, panel)
+                || _settings.SyncMonitors
+                || !_settings.RevertNonTargetPanelChanges)
+            {
+                return;
+            }
+
+            _boundaryCheckPending = true;
+            _boundaryTimer.Stop();
+            _boundaryTimer.Start();
+        });
+    }
+
+    private async Task HandleBoundaryPressAsync()
+    {
+        // A real change's event handler ran before this tick (FIFO) and cleared
+        // the flag; only a genuine boundary press leaves it set.
+        if (!_boundaryCheckPending)
+        {
+            return;
+        }
+
+        _boundaryCheckPending = false;
+
+        var panel = Displays.Displays.FirstOrDefault(d => d.Controller is WmiDisplayController);
+        if (panel is null)
+        {
+            return;
+        }
+
+        var live = _lastPanelEventValue ?? await panel.Controller.RefreshBrightnessAsync();
+        var direction = live switch
+        {
+            <= 0 => BrightnessDirection.Down,
+            >= 100 => BrightnessDirection.Up,
+            _ => (BrightnessDirection?)null,
+        };
+
+        // Not at an extreme: the press should have produced an event. Most likely
+        // this OSD was the volume flyout - not ours to mirror.
+        if (direction is null)
+        {
+            return;
+        }
+
+        var target = Displays.Target;
+        if (target is null || ReferenceEquals(target, panel))
+        {
+            return;
+        }
+
+        Log.Write($"Boundary press inferred from native OSD (panel pinned at {live}%) -> {direction}");
+        ApplyBrightness(Math.Clamp(target.Brightness + _settings.BrightnessStep * (int)direction, 0, 100));
+    }
+
+    #endregion
 
     /// <summary>Applies a brightness value honoring the sync toggle, then shows the OSD.</summary>
     private void ApplyBrightness(int value)
@@ -345,10 +482,12 @@ internal sealed class BrightnessController : IDisposable
     {
         _osd.AutoHidden -= OnOsdAutoHidden;
         _settings.PropertyChanged -= OnSettingsPropertyChanged;
+        NativeOsdSuppressor.NativeOsdShown -= OnNativeOsdShown;
         if (_tray is not null)
         {
             _tray.RawInputMessage -= _hook.ProcessRawInputMessage;
             _tray.DisplayChangeBroadcast -= OnDisplayChangeBroadcast;
+            _tray.BrightnessSettingChanged -= OnPowerBrightnessEvent;
             _tray = null;
         }
 
@@ -356,6 +495,7 @@ internal sealed class BrightnessController : IDisposable
         _restoreTimer.Stop();
         _hotplugTimer.Stop();
         _pollTimer.Stop();
+        _boundaryTimer.Stop();
 
         _wmiWatcher.Dispose();
         _hook.Dispose();

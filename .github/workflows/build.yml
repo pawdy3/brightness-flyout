@@ -90,8 +90,10 @@ jobs:
             Copy-Item BrightFlyout.cer, tools/Install-BrightFlyout.ps1 $zipStage/
             Compress-Archive "$zipStage/*" $zipPath
           }
+          # Asset list sorts alphabetically: the digit after "BrightFlyout-"
+          # sorts before the letter, so the main zip is listed first.
           Pack 'out/hybrid' "staging/BrightFlyout-$v-win-x64.zip"
-          Pack 'out/aot' "staging/BrightFlyout-$v-win-x64.experimental-aot.zip"
+          Pack 'out/aot' "staging/BrightFlyout-Experimental-AOT-$v-win-x64.zip"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
