@@ -205,27 +205,17 @@ internal sealed class BrightnessController : IDisposable
 
     private void OnBrightnessStepRequested(BrightnessDirection direction)
     {
-        var enqueued = _dispatcherQueue.TryEnqueue(async () =>
+        var enqueued = _dispatcherQueue.TryEnqueue(() =>
         {
-            try
+            var target = Displays.Target;
+            if (target is null)
             {
-                var target = Displays.Target;
-                if (target is null)
-                {
-                    Log.Write("Step ignored: no target display");
-                    return;
-                }
+                Log.Write("Step ignored: no target display");
+                return;
+            }
 
-                // Re-read before stepping: another device or app may have changed
-                // the display since we last looked (cached values go stale).
-                await target.RefreshAsync();
-                var value = Math.Clamp(target.Brightness + _settings.BrightnessStep * (int)direction, 0, 100);
-                ApplyBrightness(value);
-            }
-            catch (Exception ex)
-            {
-                Log.Write("Brightness step failed", ex);
-            }
+            var value = Math.Clamp(target.Brightness + _settings.BrightnessStep * (int)direction, 0, 100);
+            ApplyBrightness(value);
         });
 
         if (!enqueued)
